@@ -76,6 +76,54 @@ class CarExpense {
   );
 }
 
+class Maintenance {
+  final String id;
+  final String carId;
+  final String type; // روغن، گریس‌کاری، فیلتر و ...
+  final DateTime date;
+  final double cost;
+  final int? currentKm;
+  final int? nextKm;
+  final DateTime? nextDate;
+  final String? description;
+
+  Maintenance({
+    required this.id,
+    required this.carId,
+    required this.type,
+    required this.date,
+    required this.cost,
+    this.currentKm,
+    this.nextKm,
+    this.nextDate,
+    this.description,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'carId': carId,
+    'type': type,
+    'date': date.toIso8601String(),
+    'cost': cost,
+    'currentKm': currentKm,
+    'nextKm': nextKm,
+    'nextDate': nextDate?.toIso8601String(),
+    'description': description,
+  };
+
+  factory Maintenance.fromMap(Map<String, dynamic> map) => Maintenance(
+    id: map['id'],
+    carId: map['carId'],
+    type: map['type'],
+    date: DateTime.parse(map['date']),
+    cost: (map['cost'] as num).toDouble(),
+    currentKm: map['currentKm'],
+    nextKm: map['nextKm'],
+    nextDate: map['nextDate'] != null ? DateTime.parse(map['nextDate']) : null,
+    description: map['description'],
+  );
+}
+
 class LoadType {
   final String id;
   final String name;
@@ -118,14 +166,14 @@ class Customer {
   final String firstName;
   final String lastName;
   final String phone;
-  final String village; // فیلد جدید
+  final String village;
 
   Customer({
     required this.id, 
     required this.firstName, 
     required this.lastName, 
     required this.phone,
-    this.village = "", // مقدار پیش‌فرض
+    this.village = "", 
   });
 
   String get fullName => village.isNotEmpty ? "$firstName $lastName ($village)" : "$firstName $lastName";
@@ -147,6 +195,30 @@ class Customer {
   );
 }
 
+class OtherExpense {
+  final String title;
+  final double amount;
+  final String? receiptImagePath;
+
+  OtherExpense({
+    required this.title,
+    required this.amount,
+    this.receiptImagePath,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'title': title,
+    'amount': amount,
+    'receiptImagePath': receiptImagePath,
+  };
+
+  factory OtherExpense.fromMap(Map<String, dynamic> map) => OtherExpense(
+    title: map['title'] ?? '',
+    amount: (map['amount'] ?? 0 as num).toDouble(),
+    receiptImagePath: map['receiptImagePath'],
+  );
+}
+
 class ServiceExpenses {
   double billOfLadingCost;
   double tollCost;
@@ -154,6 +226,7 @@ class ServiceExpenses {
   double loadingTip;
   double unloadingTip;
   double disinfectionCost;
+  List<OtherExpense> otherExpenses;
 
   ServiceExpenses({
     this.billOfLadingCost = 0,
@@ -162,10 +235,13 @@ class ServiceExpenses {
     this.loadingTip = 0,
     this.unloadingTip = 0,
     this.disinfectionCost = 0,
+    this.otherExpenses = const [],
   });
 
-  double get total =>
-      billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost;
+  double get total {
+    double othersTotal = otherExpenses.fold(0, (sum, item) => sum + item.amount);
+    return billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + othersTotal;
+  }
 
   Map<String, dynamic> toMap() => {
     'billOfLadingCost': billOfLadingCost,
@@ -174,16 +250,21 @@ class ServiceExpenses {
     'loadingTip': loadingTip,
     'unloadingTip': unloadingTip,
     'disinfectionCost': disinfectionCost,
+    'otherExpenses': otherExpenses.map((e) => e.toMap()).toList(),
   };
 
-  factory ServiceExpenses.fromMap(Map<String, dynamic> map) => ServiceExpenses(
-    billOfLadingCost: (map['billOfLadingCost'] ?? 0 as num).toDouble(),
-    tollCost: (map['tollCost'] ?? 0 as num).toDouble(),
-    fuelCost: (map['fuelCost'] ?? 0 as num).toDouble(),
-    loadingTip: (map['loadingTip'] ?? 0 as num).toDouble(),
-    unloadingTip: (map['unloadingTip'] ?? 0 as num).toDouble(),
-    disinfectionCost: (map['disinfectionCost'] ?? 0 as num).toDouble(),
-  );
+  factory ServiceExpenses.fromMap(Map<String, dynamic> map) {
+    var othersList = map['otherExpenses'] as List? ?? [];
+    return ServiceExpenses(
+      billOfLadingCost: (map['billOfLadingCost'] ?? 0 as num).toDouble(),
+      tollCost: (map['tollCost'] ?? 0 as num).toDouble(),
+      fuelCost: (map['fuelCost'] ?? 0 as num).toDouble(),
+      loadingTip: (map['loadingTip'] ?? 0 as num).toDouble(),
+      unloadingTip: (map['unloadingTip'] ?? 0 as num).toDouble(),
+      disinfectionCost: (map['disinfectionCost'] ?? 0 as num).toDouble(),
+      otherExpenses: othersList.map((e) => OtherExpense.fromMap(Map<String, dynamic>.from(e))).toList(),
+    );
+  }
 }
 
 enum PaymentType { toSeller, fromCustomer }
@@ -202,8 +283,8 @@ class Payment {
   final String? receiptImagePath;
   final DateTime? checkDueDate;
   final String? checkImagePath;
-  final String? bankName; // فیلد جدید
-  final String? checkNumber; // فیلد جدید
+  final String? bankName;
+  final String? checkNumber;
   final bool isCleared;
 
   Payment({
@@ -278,6 +359,7 @@ class LoadService {
   final List<Payment> paymentsToSeller;
   final List<Payment> collectionsFromCustomer;
   final ServiceExpenses expenses;
+  final String? purchaseInvoiceImagePath;
 
   LoadService({
     required this.id,
@@ -296,6 +378,7 @@ class LoadService {
     this.paymentsToSeller = const [],
     this.collectionsFromCustomer = const [],
     required this.expenses,
+    this.purchaseInvoiceImagePath,
   });
 
   double get totalPurchaseAmount => weight * purchasePricePerTon;
@@ -336,6 +419,7 @@ class LoadService {
       'transportPricePerTon': transportPricePerTon,
       'purchasePricePerTon': purchasePricePerTon,
       'expenses': jsonEncode(expenses.toMap()),
+      'purchaseInvoiceImagePath': purchaseInvoiceImagePath,
     };
   }
 
@@ -366,6 +450,7 @@ class LoadService {
       paymentsToSeller: paymentsToSeller,
       collectionsFromCustomer: collectionsFromCustomer,
       expenses: ServiceExpenses.fromMap(jsonDecode(map['expenses'])),
+      purchaseInvoiceImagePath: map['purchaseInvoiceImagePath'],
     );
   }
 }

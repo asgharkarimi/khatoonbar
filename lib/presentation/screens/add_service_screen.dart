@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../../core/data/service_repository.dart';
-import '../../core/database/database_helper.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import '../widgets/amount_input.dart';
@@ -34,9 +34,17 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   final TextEditingController _destinationController = TextEditingController();
   final TextEditingController _orderCodeController = TextEditingController();
 
+  final TextEditingController _tollController = TextEditingController();
+  final TextEditingController _fuelController = TextEditingController();
+  final TextEditingController _loadingTipController = TextEditingController();
+  final TextEditingController _unloadingTipController = TextEditingController();
+  
+  List<OtherExpense> _otherExpenses = [];
+
   double _weight = 0;
   double _transportPricePerTon = 0;
   double _purchasePricePerTon = 0;
+  String? _purchaseInvoiceImagePath;
   bool _isLoading = true;
 
   @override
@@ -75,6 +83,13 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _weight = s.weight;
       _transportPricePerTon = s.transportPricePerTon;
       _purchasePricePerTon = s.purchasePricePerTon;
+      _purchaseInvoiceImagePath = s.purchaseInvoiceImagePath;
+
+      _tollController.text = s.expenses.tollCost.toString();
+      _fuelController.text = s.expenses.fuelCost.toString();
+      _loadingTipController.text = s.expenses.loadingTip.toString();
+      _unloadingTipController.text = s.expenses.unloadingTip.toString();
+      _otherExpenses = List.from(s.expenses.otherExpenses);
     });
   }
 
@@ -97,40 +112,99 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در بارگذاری اطلاعات پایه: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در بارگذاری اطلاعات: $e')));
       }
     }
   }
 
-  void _showAddDriverDialog() {
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final phoneController = TextEditingController();
+  void _addOtherExpense() {
+    final titleController = TextEditingController();
+    final amountController = TextEditingController();
+    String? imagePath;
 
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('افزودن هزینه جانبی'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleController, decoration: const InputDecoration(labelText: 'عنوان هزینه')),
+              const SizedBox(height: 12),
+              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ (تومان)')),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picker = ImagePicker();
+                  final picked = await picker.pickImage(source: ImageSource.gallery);
+                  if (picked != null) setDialogState(() => imagePath = picked.path);
+                },
+                icon: const Icon(Icons.image_outlined),
+                label: Text(imagePath == null ? 'انتخاب رسید' : 'رسید انتخاب شد'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+            ElevatedButton(
+              onPressed: () {
+                if (titleController.text.isNotEmpty && amountController.text.isNotEmpty) {
+                  setState(() {
+                    _otherExpenses.add(OtherExpense(
+                      title: titleController.text,
+                      amount: double.tryParse(amountController.text) ?? 0,
+                      receiptImagePath: imagePath,
+                    ));
+                  });
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text('افزودن'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickPurchaseInvoice() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        _purchaseInvoiceImagePath = picked.path;
+      });
+    }
+  }
+
+  // --- متدهای افزودن سریع (Quick Add) ---
+
+  void _showAddDriverDialog() {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
     _showStyledDialog(
-      title: 'افزودن راننده جدید',
+      title: 'راننده جدید',
       children: [
-        _buildTextField(controller: firstNameController, label: 'نام', icon: Icons.person_outline),
+        _buildTextField(controller: nameController, label: 'نام و نام خانوادگی', icon: Icons.person),
         const SizedBox(height: 12),
-        _buildTextField(controller: lastNameController, label: 'نام خانوادگی', icon: Icons.person_outline),
-        const SizedBox(height: 12),
-        _buildTextField(controller: phoneController, label: 'شماره تلفن', icon: Icons.phone_android_outlined, keyboardType: TextInputType.phone),
+        _buildTextField(controller: phoneController, label: 'شماره تماس', icon: Icons.phone, keyboardType: TextInputType.phone),
       ],
       onConfirm: () async {
-        if (firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty) {
-          final newItem = Driver(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            firstName: firstNameController.text,
-            lastName: lastNameController.text,
+        if (nameController.text.isNotEmpty) {
+          final names = nameController.text.trim().split(' ');
+          final first = names[0];
+          final last = names.length > 1 ? names.sublist(1).join(' ') : '';
+          
+          final newDriver = Driver(
+            id: DateTime.now().millisecondsSinceEpoch.toString(), 
+            firstName: first, 
+            lastName: last, 
             phone: phoneController.text,
           );
-          await DatabaseHelper.instance.insertDriver(newItem);
+          await _repository.saveDriver(newDriver);
           await _loadInitialData();
-          setState(() {
-            _selectedDriver = _drivers.firstWhere((d) => d.id == newItem.id, orElse: () => newItem);
-          });
+          setState(() => _selectedDriver = _drivers.firstWhere((d) => d.id == newDriver.id));
           return true;
         }
         return false;
@@ -140,23 +214,20 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
   void _showAddCarDialog() {
     final nameController = TextEditingController();
-
+    final plateController = TextEditingController();
     _showStyledDialog(
-      title: 'افزودن ماشین جدید',
+      title: 'خودرو جدید',
       children: [
-        _buildTextField(controller: nameController, label: 'نام ماشین', icon: Icons.local_shipping_outlined),
+        _buildTextField(controller: nameController, label: 'نام خودرو', icon: Icons.local_shipping),
+        const SizedBox(height: 12),
+        _buildTextField(controller: plateController, label: 'شماره پلاک', icon: Icons.badge),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
-          final newItem = Car(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            name: nameController.text,
-          );
-          await DatabaseHelper.instance.insertCar(newItem);
+          final newCar = Car(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text, plate: plateController.text);
+          await _repository.saveCar(newCar);
           await _loadInitialData();
-          setState(() {
-            _selectedCar = _cars.firstWhere((c) => c.id == newItem.id, orElse: () => newItem);
-          });
+          setState(() => _selectedCar = _cars.firstWhere((c) => c.id == newCar.id));
           return true;
         }
         return false;
@@ -164,25 +235,35 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  void _showAddLoadTypeDialog() {
+  void _showAddCustomerDialog() {
     final nameController = TextEditingController();
-
+    final phoneController = TextEditingController();
+    final villageController = TextEditingController();
     _showStyledDialog(
-      title: 'افزودن نوع بار جدید',
+      title: 'مشتری جدید',
       children: [
-        _buildTextField(controller: nameController, label: 'نام بار (مثلا سیمان)', icon: Icons.category_outlined),
+        _buildTextField(controller: nameController, label: 'نام و نام خانوادگی', icon: Icons.person_pin),
+        const SizedBox(height: 12),
+        _buildTextField(controller: phoneController, label: 'شماره تماس', icon: Icons.phone, keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+        _buildTextField(controller: villageController, label: 'روستا/منطقه', icon: Icons.location_city),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
-          final newItem = LoadType(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            name: nameController.text,
+          final names = nameController.text.trim().split(' ');
+          final first = names[0];
+          final last = names.length > 1 ? names.sublist(1).join(' ') : '';
+
+          final newCustomer = Customer(
+            id: DateTime.now().millisecondsSinceEpoch.toString(), 
+            firstName: first, 
+            lastName: last, 
+            phone: phoneController.text,
+            village: villageController.text,
           );
-          await DatabaseHelper.instance.insertLoadType(newItem);
+          await _repository.saveCustomer(newCustomer);
           await _loadInitialData();
-          setState(() {
-            _selectedLoadType = _loadTypes.firstWhere((lt) => lt.id == newItem.id, orElse: () => newItem);
-          });
+          setState(() => _selectedCustomer = _customers.firstWhere((c) => c.id == newCustomer.id));
           return true;
         }
         return false;
@@ -193,26 +274,19 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   void _showAddSellerDialog() {
     final nameController = TextEditingController();
     final productController = TextEditingController();
-
     _showStyledDialog(
-      title: 'افزودن فروشنده جدید',
+      title: 'فروشنده/شرکت جدید',
       children: [
-        _buildTextField(controller: nameController, label: 'نام فروشگاه / شرکت', icon: Icons.store_outlined),
+        _buildTextField(controller: nameController, label: 'نام فروشنده', icon: Icons.store),
         const SizedBox(height: 12),
-        _buildTextField(controller: productController, label: 'محصول اصلی', icon: Icons.inventory_2_outlined),
+        _buildTextField(controller: productController, label: 'نوع کالا', icon: Icons.category),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
-          final newItem = Seller(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            name: nameController.text,
-            product: productController.text,
-          );
-          await DatabaseHelper.instance.insertSeller(newItem);
+          final newSeller = Seller(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text, product: productController.text);
+          await _repository.saveSeller(newSeller);
           await _loadInitialData();
-          setState(() {
-            _selectedSeller = _sellers.firstWhere((s) => s.id == newItem.id, orElse: () => newItem);
-          });
+          setState(() => _selectedSeller = _sellers.firstWhere((s) => s.id == newSeller.id));
           return true;
         }
         return false;
@@ -220,37 +294,19 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  void _showAddCustomerDialog() {
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final phoneController = TextEditingController();
-    final villageController = TextEditingController();
-
+  void _showAddLoadTypeDialog() {
+    final nameController = TextEditingController();
     _showStyledDialog(
-      title: 'افزودن مشتری جدید',
+      title: 'نوع بار جدید',
       children: [
-        _buildTextField(controller: firstNameController, label: 'نام', icon: Icons.person_outline),
-        const SizedBox(height: 12),
-        _buildTextField(controller: lastNameController, label: 'نام خانوادگی', icon: Icons.person_outline),
-        const SizedBox(height: 12),
-        _buildTextField(controller: villageController, label: 'نام روستا', icon: Icons.location_city_outlined),
-        const SizedBox(height: 12),
-        _buildTextField(controller: phoneController, label: 'شماره تلفن', icon: Icons.phone_android_outlined, keyboardType: TextInputType.phone),
+        _buildTextField(controller: nameController, label: 'نام بار', icon: Icons.category),
       ],
       onConfirm: () async {
-        if (firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty) {
-          final newCustomer = Customer(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            firstName: firstNameController.text,
-            lastName: lastNameController.text,
-            phone: phoneController.text,
-            village: villageController.text,
-          );
-          await DatabaseHelper.instance.insertCustomer(newCustomer);
+        if (nameController.text.isNotEmpty) {
+          final newType = LoadType(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text);
+          await _repository.saveLoadType(newType);
           await _loadInitialData();
-          setState(() {
-            _selectedCustomer = _customers.firstWhere((c) => c.id == newCustomer.id, orElse: () => newCustomer);
-          });
+          setState(() => _selectedLoadType = _loadTypes.firstWhere((lt) => lt.id == newType.id));
           return true;
         }
         return false;
@@ -258,43 +314,18 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  // متد کمکی برای نمایش دیالوگ با استایل یکسان
-  void _showStyledDialog({
-    required String title,
-    required List<Widget> children,
-    required Future<bool> Function() onConfirm,
-  }) {
+  void _showStyledDialog({required String title, required List<Widget> children, required Future<bool> Function() onConfirm}) {
     showDialog(
-      context: context,
+      context: context, 
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              ...children,
-            ],
-          ),
-        ),
+        title: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), 
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: children)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('انصراف', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final success = await onConfirm();
-              if (success && mounted) Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('ذخیره'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          ElevatedButton(onPressed: () async { if (await onConfirm() && mounted) Navigator.pop(context); }, child: const Text('ذخیره')),
         ],
-      ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      )
     );
   }
 
@@ -304,60 +335,57 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     
     double totalTransport = _weight * _transportPricePerTon;
     double totalPurchase = _weight * _purchasePricePerTon;
-    double grandTotal = totalTransport + totalPurchase;
+    
+    double otherExpensesSum = _otherExpenses.fold(0, (sum, item) => sum + item.amount);
+    double fixedExpensesSum = (double.tryParse(_tollController.text) ?? 0) +
+                             (double.tryParse(_fuelController.text) ?? 0) +
+                             (double.tryParse(_loadingTipController.text) ?? 0) +
+                             (double.tryParse(_unloadingTipController.text) ?? 0);
+    double totalExpenses = fixedExpensesSum + otherExpensesSum;
+    double netProfit = totalTransport - totalExpenses;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9FAFB),
-      appBar: AppBar(
-        title: Text(widget.serviceToEdit == null ? 'ثبت سرویس جدید' : 'ویرایش سرویس'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: Text(widget.serviceToEdit == null ? 'ثبت سرویس جدید' : 'ویرایش سرویس')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              padding: const EdgeInsets.all(20),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildStepCard(
-                      title: 'شناسه و اطلاعات اصلی',
+                      title: 'اطلاعات اصلی',
                       icon: Icons.qr_code_scanner,
                       children: [
-                        _buildTextField(
-                          controller: _orderCodeController,
-                          label: 'کد سفارش / شماره حواله',
-                          icon: Icons.numbers,
-                          readOnly: true,
-                          hint: 'در حال تولید خودکار...',
-                        ),
+                        _buildTextField(controller: _orderCodeController, label: 'کد سفارش', icon: Icons.numbers, readOnly: true),
                         const SizedBox(height: 12),
                         _buildDropdownField<Driver>(
-                          label: 'انتخاب راننده',
-                          icon: Icons.person_outline,
-                          value: _selectedDriver,
-                          items: _drivers,
-                          onChanged: (val) => _selectedDriver = val,
+                          label: 'انتخاب راننده', 
+                          icon: Icons.person_outline, 
+                          value: _selectedDriver, 
+                          items: _drivers, 
+                          onChanged: (v) => _selectedDriver = v, 
                           itemLabel: (d) => d.fullName,
                           onAddPressed: _showAddDriverDialog,
                         ),
                         _buildDropdownField<Car>(
-                          label: 'انتخاب ماشین',
-                          icon: Icons.local_shipping_outlined,
-                          value: _selectedCar,
-                          items: _cars,
-                          onChanged: (val) => _selectedCar = val,
+                          label: 'انتخاب ماشین', 
+                          icon: Icons.local_shipping_outlined, 
+                          value: _selectedCar, 
+                          items: _cars, 
+                          onChanged: (v) => _selectedCar = v, 
                           itemLabel: (c) => c.name,
                           onAddPressed: _showAddCarDialog,
                         ),
                         _buildDropdownField<LoadType>(
-                          label: 'نوع بار',
-                          icon: Icons.category_outlined,
-                          value: _selectedLoadType,
-                          items: _loadTypes,
-                          onChanged: (val) => _selectedLoadType = val,
-                          itemLabel: (lt) => lt.name,
+                          label: 'نوع بار', 
+                          icon: Icons.category_outlined, 
+                          value: _selectedLoadType, 
+                          items: _loadTypes, 
+                          onChanged: (v) => _selectedLoadType = v, 
+                          itemLabel: (l) => l.name,
                           onAddPressed: _showAddLoadTypeDialog,
                         ),
                       ],
@@ -368,43 +396,29 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       icon: Icons.map_outlined,
                       children: [
                         _buildDropdownField<Seller>(
-                          label: 'فروشنده / شرکت',
-                          icon: Icons.store_outlined,
-                          value: _selectedSeller,
-                          items: _sellers,
-                          onChanged: (val) => _selectedSeller = val,
+                          label: 'فروشنده', 
+                          icon: Icons.store_outlined, 
+                          value: _selectedSeller, 
+                          items: _sellers, 
+                          onChanged: (v) => _selectedSeller = v, 
                           itemLabel: (s) => s.name,
                           onAddPressed: _showAddSellerDialog,
                         ),
                         _buildDropdownField<Customer>(
-                          label: 'مشتری (گیرنده)',
-                          icon: Icons.person_pin_outlined,
-                          value: _selectedCustomer,
-                          items: _customers,
-                          onChanged: (val) => _selectedCustomer = val,
-                          itemLabel: (c) => c.fullName, 
+                          label: 'مشتری', 
+                          icon: Icons.person_pin_outlined, 
+                          value: _selectedCustomer, 
+                          items: _customers, 
+                          onChanged: (v) => _selectedCustomer = v, 
+                          itemLabel: (c) => c.fullName,
                           onAddPressed: _showAddCustomerDialog,
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildTextField(
-                                controller: _originController,
-                                label: 'مبدا',
-                                icon: Icons.location_on_outlined,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _buildTextField(
-                                controller: _destinationController,
-                                label: 'مقصد',
-                                icon: Icons.flag_outlined,
-                              ),
-                            ),
-                          ],
-                        ),
+                        Row(children: [
+                          Expanded(child: _buildTextField(controller: _originController, label: 'مبدا', icon: Icons.location_on_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildTextField(controller: _destinationController, label: 'مقصد', icon: Icons.flag_outlined)),
+                        ]),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -412,75 +426,80 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       title: 'جزییات بار و مالی',
                       icon: Icons.payments_outlined,
                       children: [
-                        AmountInput(
-                          label: 'وزن بار (تن)',
-                          unit: 'تن',
-                          isDecimal: true,
-                          initialValue: widget.serviceToEdit?.weight,
-                          onChanged: (val) => setState(() => _weight = val),
-                        ),
+                        AmountInput(label: 'وزن بار (تن)', unit: 'تن', isDecimal: true, initialValue: _weight, onChanged: (v) => setState(() => _weight = v)),
                         const SizedBox(height: 12),
-                        AmountInput(
-                          label: 'قیمت هر تن حمل (تومان)',
-                          initialValue: widget.serviceToEdit?.transportPricePerTon,
-                          onChanged: (val) => setState(() => _transportPricePerTon = val),
-                        ),
+                        AmountInput(label: 'قیمت هر تن حمل', initialValue: _transportPricePerTon, onChanged: (v) => setState(() => _transportPricePerTon = v)),
                         const SizedBox(height: 12),
-                        AmountInput(
-                          label: 'قیمت هر تن خرید (اختیاری)',
-                          hint: 'در صورت مسئولیت حمل توسط راننده، می‌تواند 0 باشد',
-                          initialValue: widget.serviceToEdit?.purchasePricePerTon,
-                          onChanged: (val) => setState(() => _purchasePricePerTon = val),
+                        AmountInput(label: 'قیمت هر تن خرید', initialValue: _purchasePricePerTon, onChanged: (v) => setState(() => _purchasePricePerTon = v)),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _pickPurchaseInvoice,
+                          icon: Icon(_purchaseInvoiceImagePath == null ? Icons.add_photo_alternate_outlined : Icons.check_circle_outline),
+                          label: Text(_purchaseInvoiceImagePath == null ? 'پیوست فاکتور خرید' : 'فاکتور خرید انتخاب شد'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            foregroundColor: _purchaseInvoiceImagePath == null ? theme.primaryColor : Colors.green,
+                          ),
                         ),
+                        if (_purchaseInvoiceImagePath != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(File(_purchaseInvoiceImagePath!), width: 50, height: 50, fit: BoxFit.cover),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () => setState(() => _purchaseInvoiceImagePath = null),
+                                  child: const Text('حذف فاکتور', style: TextStyle(color: Colors.red, fontSize: 12)),
+                                )
+                              ],
+                            ),
+                          ),
                       ],
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: theme.colorScheme.primary.withOpacity(0.1)),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildCalcRow('جمع کرایه حمل:', totalTransport, theme),
-                          if (_purchasePricePerTon > 0) ...[
-                            const SizedBox(height: 8),
-                            _buildCalcRow('جمع مبلغ خرید بار:', totalPurchase, theme),
-                          ],
-                          const Divider(height: 24),
-                          _buildCalcRow(
-                            'مبلغ کل نهایی (بدهی مشتری):', 
-                            grandTotal, 
-                            theme, 
-                            isBold: true,
-                            color: theme.colorScheme.primary
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 16),
+                    _buildStepCard(
+                      title: 'مخارج و هزینه‌های سرویس',
+                      icon: Icons.receipt_long_outlined,
+                      children: [
+                        Row(children: [
+                          Expanded(child: _buildTextField(controller: _fuelController, label: 'سوخت', icon: Icons.local_gas_station_outlined, keyboardType: TextInputType.number)),
+                          const SizedBox(width: 8),
+                          Expanded(child: _buildTextField(controller: _tollController, label: 'عوارض', icon: Icons.confirmation_number_outlined, keyboardType: TextInputType.number)),
+                        ]),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          Expanded(child: _buildTextField(controller: _loadingTipController, label: 'انعام بارگیری', icon: Icons.upload_outlined, keyboardType: TextInputType.number)),
+                          const SizedBox(width: 8),
+                          Expanded(child: _buildTextField(controller: _unloadingTipController, label: 'انعام تخلیه', icon: Icons.download_outlined, keyboardType: TextInputType.number)),
+                        ]),
+                        const Divider(height: 32),
+                        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          const Text('سایر هزینه‌ها (با رسید)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          TextButton.icon(onPressed: _addOtherExpense, icon: const Icon(Icons.add, size: 18), label: const Text('افزودن')),
+                        ]),
+                        ..._otherExpenses.map((exp) => ListTile(
+                          dense: true,
+                          title: Text(exp.title),
+                          subtitle: Text("${AppFormatters.formatCurrency(exp.amount)} تومان"),
+                          trailing: IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20), onPressed: () => setState(() => _otherExpenses.remove(exp))),
+                        )),
+                      ],
                     ),
-
+                    const SizedBox(height: 24),
+                    _buildSummaryCard(totalTransport, totalPurchase, totalExpenses, netProfit, theme),
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
                         onPressed: _saveService,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.primaryColor,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          widget.serviceToEdit == null ? 'ثبت و ذخیره نهایی' : 'اعمال تغییرات',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        style: ElevatedButton.styleFrom(backgroundColor: theme.primaryColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                        child: Text(widget.serviceToEdit == null ? 'ثبت نهایی سرویس' : 'ذخیره تغییرات', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 40),
@@ -491,70 +510,66 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildCalcRow(String label, double amount, ThemeData theme, {bool isBold = false, Color? color}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-        Text(
-          "${AppFormatters.formatCurrency(amount)} تومان",
-          style: TextStyle(
-            fontSize: isBold ? 15 : 13, 
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-            color: color,
-            fontFamily: 'IranYekan'
-          ),
-        ),
-      ],
+  Widget _buildSummaryCard(double transport, double purchase, double expenses, double profit, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: theme.primaryColor.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.primaryColor.withOpacity(0.1))),
+      child: Column(
+        children: [
+          _buildCalcRow('جمع کرایه حمل:', transport, theme),
+          if (purchase > 0) _buildCalcRow('جمع مبلغ خرید:', purchase, theme),
+          _buildCalcRow('جمع کل هزینه‌ها:', expenses, theme, color: Colors.red),
+          const Divider(height: 24),
+          _buildCalcRow('سود خالص (از حمل):', profit, theme, isBold: true, color: Colors.green.shade700),
+        ],
+      ),
     );
   }
 
-  Widget _buildStepCard({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFEAECF0)),
+  Widget _buildCalcRow(String label, double amount, ThemeData theme, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text("${AppFormatters.formatCurrency(amount)} تومان", style: TextStyle(fontSize: isBold ? 15 : 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
+        ],
       ),
+    );
+  }
+
+  Widget _buildStepCard({required String title, required IconData icon, required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFEAECF0))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: Theme.of(context).primaryColor),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1D2939),
-                ),
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: Color(0xFFF2F4F7), height: 1),
-          ),
+          Row(children: [Icon(icon, size: 20, color: Theme.of(context).primaryColor), const SizedBox(width: 8), Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold))]),
+          const Divider(height: 24),
           ...children,
         ],
       ),
     );
   }
 
+  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType keyboardType = TextInputType.text, bool readOnly = false}) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      readOnly: readOnly,
+      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+    );
+  }
+
   Widget _buildDropdownField<T>({
-    required String label,
-    required IconData icon,
-    required T? value,
-    required List<T> items,
-    required void Function(T?) onChanged,
+    required String label, 
+    required IconData icon, 
+    required T? value, 
+    required List<T> items, 
+    required void Function(T?) onChanged, 
     required String Function(T) itemLabel,
     VoidCallback? onAddPressed,
   }) {
@@ -565,103 +580,47 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           Expanded(
             child: DropdownButtonFormField<T>(
               value: value,
-              decoration: InputDecoration(
-                labelText: label,
-                prefixIcon: Icon(icon, size: 20),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
-                ),
-              ),
+              decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               items: items.map((i) => DropdownMenuItem(value: i, child: Text(itemLabel(i)))).toList(),
-              onChanged: (val) => setState(() => onChanged(val)),
+              onChanged: (v) => setState(() => onChanged(v)),
             ),
           ),
           if (onAddPressed != null) ...[
             const SizedBox(width: 8),
-            IconButton(
-              onPressed: onAddPressed,
-              icon: const Icon(Icons.add_circle_outline),
-              color: Theme.of(context).primaryColor,
-              tooltip: 'افزودن جدید',
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: IconButton(
+                onPressed: onAddPressed,
+                icon: Icon(Icons.add, color: Theme.of(context).primaryColor),
+                tooltip: 'افزودن سریع',
+              ),
             ),
-          ],
+          ]
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    bool readOnly = false,
-    String? hint,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      readOnly: readOnly,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: Icon(icon, size: 20),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD0D5DD)),
-        ),
       ),
     );
   }
 
   Future<void> _saveService() async {
     if (_selectedDriver == null || _selectedCar == null || _selectedSeller == null || _selectedLoadType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لطفا تمامی فیلدهای ستاره‌دار را پر کنید')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفا تمامی موارد ضروری را انتخاب کنید')));
       return;
     }
 
-    final orderCode = _orderCodeController.text.trim();
-    if (orderCode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لطفا کد سفارش را وارد کنید')),
-      );
-      return;
-    }
-
-    if (_transportPricePerTon <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('خطا: هزینه حمل نمی‌تواند صفر باشد.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    // بررسی مجدد تکراری نبودن کد قبل از ذخیره نهایی
-    final isDuplicate = await _repository.isOrderCodeDuplicate(orderCode, excludeId: widget.serviceToEdit?.id);
-    if (isDuplicate) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('خطا: این کد سفارش قبلاً ثبت شده است. در حال تولید کد جدید...'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      // تولید مجدد کد در صورت بروز تکرار ناخواسته
-      await _generateOrderCode();
-      return;
-    }
+    final expenses = ServiceExpenses(
+      fuelCost: double.tryParse(_fuelController.text) ?? 0,
+      tollCost: double.tryParse(_tollController.text) ?? 0,
+      loadingTip: double.tryParse(_loadingTipController.text) ?? 0,
+      unloadingTip: double.tryParse(_unloadingTipController.text) ?? 0,
+      otherExpenses: _otherExpenses,
+    );
 
     final newService = LoadService(
       id: widget.serviceToEdit?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      orderCode: orderCode,
+      orderCode: _orderCodeController.text,
       car: _selectedCar!,
       driver: _selectedDriver!,
       loadType: _selectedLoadType!,
@@ -673,26 +632,15 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       weight: _weight,
       transportPricePerTon: _transportPricePerTon,
       purchasePricePerTon: _purchasePricePerTon,
-      expenses: widget.serviceToEdit?.expenses ?? ServiceExpenses(),
+      expenses: expenses,
+      purchaseInvoiceImagePath: _purchaseInvoiceImagePath,
     );
 
     try {
       await _repository.saveService(newService);
-      if (mounted) {
-        Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.serviceToEdit == null ? 'سرویس با موفقیت ثبت شد' : 'تغییرات با موفقیت ذخیره شد'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در ذخیره‌سازی: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطا در ذخیره: $e')));
     }
   }
 }

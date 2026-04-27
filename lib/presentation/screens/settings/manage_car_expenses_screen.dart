@@ -102,7 +102,7 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
               ? const Center(child: Text('هیچ هزینه‌ای ثبت نشده است'))
               : ListView.builder(
                   itemCount: _expenses.length,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
                   itemBuilder: (context, index) {
                     final expense = _expenses[index];
                     final car = _cars.firstWhere((c) => c.id == expense.carId, 
@@ -155,6 +155,7 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                     );
                   },
                 ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat, // وسط‌چین افقی
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddExpenseDialog,
         label: const Text('ثبت هزینه جدید'),

@@ -5,6 +5,7 @@ import 'settings/manage_sellers_screen.dart';
 import 'settings/manage_load_types_screen.dart';
 import 'settings/manage_customers_screen.dart';
 import 'settings/manage_car_expenses_screen.dart';
+import 'maintenance_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -44,6 +45,15 @@ class SettingsScreen extends StatelessWidget {
           ),
           _buildSettingItem(
             context,
+            'سرویس‌های دوره‌ای (نت)',
+            'تعویض روغن، گریس‌کاری و یادآوری',
+            Icons.build_circle,
+            const MaintenanceScreen(),
+            highlightColor: Colors.orange,
+          ),
+          const Divider(height: 32),
+          _buildSettingItem(
+            context,
             'مدیریت رانندگان',
             'افزودن و ویرایش لیست رانندگان',
             Icons.person_add,
@@ -60,7 +70,7 @@ class SettingsScreen extends StatelessWidget {
             context,
             'هزینه‌های متفرقه ماشین',
             'تعمیرات، لاستیک، بیمه و غیره',
-            Icons.build_circle_outlined,
+            Icons.settings_suggest_outlined,
             const ManageCarExpensesScreen(),
           ),
           _buildSettingItem(
@@ -84,15 +94,6 @@ class SettingsScreen extends StatelessWidget {
             Icons.category,
             const ManageLoadTypesScreen(),
           ),
-          const Divider(height: 40),
-          _buildSettingItem(
-            context,
-            'دیتای تست',
-            'فعال/غیرفعال سازی داده‌های پیش‌فرض',
-            Icons.bug_report,
-            null,
-            isSwitch: true,
-          ),
         ],
       ),
     );
@@ -105,6 +106,7 @@ class SettingsScreen extends StatelessWidget {
     IconData icon,
     Widget? targetScreen, {
     bool isSwitch = false,
+    Color highlightColor = Colors.green,
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -115,8 +117,8 @@ class SettingsScreen extends StatelessWidget {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: Colors.green.withOpacity(0.1),
-          child: Icon(icon, color: Colors.green),
+          backgroundColor: highlightColor.withOpacity(0.1),
+          child: Icon(icon, color: highlightColor),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),

@@ -125,6 +125,13 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
   }
 
   Widget _buildBalanceHeader(double debt, double paid, double balance) {
+    String statusLabel = "تسویه شده";
+    if (balance > 0) {
+      statusLabel = "مانده بدهی شما:";
+    } else if (balance < 0) {
+      statusLabel = "بستانکاری (طلب شما):";
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -133,9 +140,12 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Card(
-        color: balance > 0 ? Colors.red.shade50 : Colors.green.shade50,
+        color: balance > 0 ? Colors.red.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: balance > 0 ? Colors.red.shade100 : Colors.green.shade100)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12), 
+          side: BorderSide(color: balance > 0 ? Colors.red.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -143,10 +153,14 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("مانده نهایی بدهی:", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(statusLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(
-                    "${AppFormatters.formatCurrency(balance)} تومان",
-                    style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.red.shade900 : Colors.green.shade900, fontSize: 18),
+                    "${AppFormatters.formatCurrency(balance.abs())} تومان",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      color: balance > 0 ? Colors.red.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), 
+                      fontSize: 18
+                    ),
                   ),
                 ],
               ),

@@ -37,8 +37,73 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
   DateTime _selectedDate = DateTime.now();
   DateTime? _checkDueDate;
   String? _imagePath;
-  bool _isCleared = true; // نقد و کارت همیشه وصول شده‌اند
+  bool _isCleared = true; 
   final ImagePicker _picker = ImagePicker();
+
+  double _overallDebt = 0;
+  double _overallPaid = 0;
+  bool _isStatsLoading = false;
+
+  // برای مدیریت انتخاب بارها
+  List<LoadService> _unsettledServices = [];
+  final List<String> _selectedServiceCodes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isStatsLoading = true);
+    final allServices = await DatabaseHelper.instance.getAllServices();
+    final allPayments = await DatabaseHelper.instance.getAllPayments();
+
+    double debt = 0;
+    double paid = 0;
+
+    if (widget.customSellerId != null) {
+      final sellerServices = allServices.where((s) => s.seller.id == widget.customSellerId).toList();
+      debt = sellerServices.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
+      paid = allPayments
+          .where((p) => (p.sellerId == widget.customSellerId || sellerServices.any((s) => s.id == p.serviceId)) && p.isCleared)
+          .fold(0.0, (sum, p) => sum + p.amount);
+      
+      // پیدا کردن بارهای تسویه نشده این شرکت
+      _unsettledServices = sellerServices.where((s) => s.remainingDebtToSeller > 0).toList();
+
+    } else if (widget.customCustomerId != null) {
+      final customerServices = allServices.where((s) => s.customer?.id == widget.customCustomerId).toList();
+      debt = customerServices.fold(0.0, (sum, s) => sum + s.totalServicePriceForCustomer);
+      paid = allPayments
+          .where((p) => (p.customerId == widget.customCustomerId || customerServices.any((s) => s.id == p.serviceId)) && p.isCleared)
+          .fold(0.0, (sum, p) => sum + p.amount);
+
+      // پیدا کردن بارهای تسویه نشده این مشتری
+      _unsettledServices = customerServices.where((s) => s.remainingCustomerDebt > 0).toList();
+    }
+
+    setState(() {
+      _overallDebt = debt;
+      _overallPaid = paid;
+      _isStatsLoading = false;
+    });
+  }
+
+  void _updateDescriptionWithCodes() {
+    if (_selectedServiceCodes.isEmpty) return;
+    
+    String prefix = "بابت بارهای: ";
+    String codes = _selectedServiceCodes.join('، ');
+    
+    // پاک کردن متون قبلی که با "بابت بارهای" شروع میشدن برای جلوگیری از تکرار
+    String currentText = _descriptionController.text;
+    if (currentText.contains(prefix)) {
+      currentText = currentText.split(prefix)[0].trim();
+    }
+    
+    _descriptionController.text = currentText.isEmpty ? "$prefix$codes" : "$currentText ($prefix$codes)";
+  }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50);
@@ -79,24 +144,55 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!isGeneral) _buildFinanceSummary(targetName, theme),
-              if (isGeneral) Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
-                child: Text("در حال ثبت تراکنش کلی برای: $targetName", style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
+              _buildFinanceSummary(targetName, theme, isGeneral),
               const SizedBox(height: 24),
               AmountInput(
                 label: 'مبلغ (تومان)',
                 onChanged: (val) => _amount = val,
               ),
               const SizedBox(height: 20),
-              _buildLabel('توضیحات / بابتِ...'),
+              
+              if (isGeneral && _unsettledServices.isNotEmpty) ...[
+                _buildLabel('انتخاب بارهای مربوط به این تراکنش:'),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: _unsettledServices.map((s) {
+                      bool isSelected = _selectedServiceCodes.contains(s.orderCode);
+                      double rem = widget.isCollection ? s.remainingCustomerDebt : s.remainingDebtToSeller;
+                      return CheckboxListTile(
+                        title: Text("${s.loadType.name} (${s.orderCode})", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        subtitle: Text("مانده: ${AppFormatters.formatCurrency(rem)} تومان", style: const TextStyle(fontSize: 11)),
+                        value: isSelected,
+                        dense: true,
+                        activeColor: theme.primaryColor,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedServiceCodes.add(s.orderCode);
+                            } else {
+                              _selectedServiceCodes.remove(s.orderCode);
+                            }
+                            _updateDescriptionWithCodes();
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+
+              _buildLabel('توضیحات'),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
-                  hintText: isGeneral ? 'مثلا: بابت تسویه ۱۰ سرویس اخیر' : 'مثلا: علی‌الحساب',
+                  hintText: isGeneral ? 'مثلا: بابت تسویه حساب' : 'مثلا: علی‌الحساب',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
@@ -117,12 +213,7 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                 onChanged: (val) {
                   setState(() {
                     _selectedMethod = val!;
-                    // اگر چک انتخاب شد، پیش‌فرض وصول نشده باشد
-                    if (_selectedMethod == PaymentMethod.check) {
-                      _isCleared = false;
-                    } else {
-                      _isCleared = true;
-                    }
+                    _isCleared = (_selectedMethod != PaymentMethod.check);
                   });
                 },
               ),
@@ -278,14 +369,18 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
     );
   }
 
-  Widget _buildFinanceSummary(String targetName, ThemeData theme) {
-    double totalDebt = widget.isCollection 
+  Widget _buildFinanceSummary(String targetName, ThemeData theme, bool isGeneral) {
+    if (isGeneral && _isStatsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    double totalDebt = isGeneral ? _overallDebt : (widget.isCollection 
         ? widget.service.totalServicePriceForCustomer 
-        : widget.service.totalPurchaseAmount;
+        : widget.service.totalPurchaseAmount);
     
-    double totalPaid = widget.isCollection 
+    double totalPaid = isGeneral ? _overallPaid : (widget.isCollection 
         ? widget.service.totalCollectedFromCustomer 
-        : widget.service.totalPaidToSeller;
+        : widget.service.totalPaidToSeller);
     
     double remaining = totalDebt - totalPaid;
 
@@ -298,12 +393,15 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
       ),
       child: Column(
         children: [
-          Text("خلاصه وضعیت مالی $targetName", style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(
+            isGeneral ? "خلاصه کل حساب $targetName" : "خلاصه وضعیت مالی این سرویس", 
+            style: const TextStyle(fontWeight: FontWeight.bold)
+          ),
           const Divider(),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(widget.isCollection ? "کل بدهی مشتری:" : "کل بدهی ما به فروشنده:"),
+              Text(widget.isCollection ? "کل طلب از مشتری:" : "کل بدهی به فروشنده:"),
               Text("${AppFormatters.formatCurrency(totalDebt)} تومان"),
             ],
           ),
@@ -311,13 +409,11 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("مانده فعلی:"),
+              const Text("مانده نهایی بدهی:"),
               Text(
-                remaining == 0 
+                remaining <= 0 
                   ? "تسویه شده" 
-                  : (remaining < 0 
-                      ? "بستانکاری: ${AppFormatters.formatCurrency(remaining.abs())} تومان" 
-                      : "${AppFormatters.formatCurrency(remaining)} تومان"), 
+                  : "${AppFormatters.formatCurrency(remaining)} تومان",
                 style: TextStyle(
                   fontWeight: FontWeight.bold, 
                   color: remaining <= 0 ? Colors.green : Colors.red

@@ -101,7 +101,14 @@ class DatabaseHelper {
     return res.map((m) => LoadType.fromMap(m)).toList();
   }
 
-  // Car Expenses
+  // Maintenance (Periodic Services)
+  Future<void> insertMaintenance(Maintenance maintenance) async => await insert('maintenances', maintenance.toMap());
+  Future<List<Maintenance>> getAllMaintenances() async {
+    final res = await queryAll('maintenances');
+    return res.map((m) => Maintenance.fromMap(m)).toList();
+  }
+
+  // Car Expenses (Miscellaneous)
   Future<void> insertCarExpense(CarExpense expense) async => await insert('car_expenses', expense.toMap());
   Future<List<CarExpense>> getAllCarExpenses() async {
     final res = await queryAll('car_expenses');
@@ -161,7 +168,6 @@ class DatabaseHelper {
     return services;
   }
   
-  // برای جلوگیری از خطا، پارامتر دوم را به صورت اختیاریِ موقعیتی یا نام‌دار مدیریت می‌کنیم
   Future<void> insertPayment(Payment payment, {String? serviceId, String? sellerId, String? customerId}) async {
     final map = payment.toMap();
     if (serviceId != null) map['serviceId'] = serviceId;

@@ -21,6 +21,7 @@ void main() async {
   await Hive.openBox('load_services');
   await Hive.openBox('payments');
   await Hive.openBox('car_expenses');
+  await Hive.openBox('maintenances');
 
   await DatabaseHelper.instance.seedDefaultData();
 
