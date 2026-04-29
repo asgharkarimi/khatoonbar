@@ -30,66 +30,94 @@ class PersianTextShaper {
     0x063A: [0xFECD, 0xFECE, 0xFECF, 0xFED0], // Ghain
     0x0641: [0xFED1, 0xFED2, 0xFED3, 0xFED4], // Feh
     0x0642: [0xFED5, 0xFED6, 0xFED7, 0xFED8], // Qaf
-    0x0643: [0xFED9, 0xFEDA, 0xFEDB, 0xFEDC], // Arabic Kaf
-    0x06A9: [0xFB8E, 0xFB8F, 0xFB90, 0xFB91], // Keheh (Persian Kaf)
+    0x06A9: [0xFB8E, 0xFB8F, 0xFB90, 0xFB91], // Kaf
     0x06AF: [0xFB92, 0xFB93, 0xFB94, 0xFB95], // Gaf
     0x0644: [0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0], // Lam
     0x0645: [0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4], // Meem
     0x0646: [0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8], // Noon
-    0x0648: [0xFEE9, 0xFEEA, 0xFEE9, 0xFEEA], // Waw
-    0x0647: [0xFEEB, 0xFEEC, 0xFEED, 0xFEEE], // Heh
-    0x064A: [0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4], // Arabic Yeh
-    0x06CC: [0xFBFC, 0xFBFD, 0xFBFE, 0xFBFF], // Farsi Yeh
+    0x0648: [0xFEED, 0xFEEE, 0xFEED, 0xFEEE], // Waw (FIXED: Isolated=FEED, Final=FEEE)
+    0x0647: [0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC], // Heh (FIXED: Iso=FEE9, Fin=FEEA, Ini=FEEB, Med=FEEC)
+    0x06CC: [0xFBFC, 0xFBFD, 0xFBFE, 0xFBFF], // Yeh
   };
 
-  static bool _canConnectLeft(int charCode) {
-    if (!_forms.containsKey(charCode)) return false;
-    // Characters that DON'T connect to the left
-    return ![0x0621, 0x0622, 0x0627, 0x062F, 0x0630, 0x0631, 0x0632, 0x0698, 0x0648].contains(charCode);
+  static bool _connectsToLeft(int charCode) {
+    // حروف که به چپ نمی‌چسبند
+    return _forms.containsKey(charCode) && 
+           !([0x0627, 0x0622, 0x062F, 0x0630, 0x0631, 0x0632, 0x0698, 0x0648].contains(charCode));
   }
 
-  static bool _canConnectRight(int charCode) {
-    return _forms.containsKey(charCode);
+  static bool _connectsToRight(int charCode) {
+    return _forms.containsKey(charCode) && charCode != 0x0621;
   }
 
   static String shape(String text) {
     if (text.isEmpty) return text;
-    
-    // Handle Lam-Alef Ligature (Common cause of "spelling errors")
-    String processedText = text.replaceAll('\u0644\u0627', '\uFEFB'); // Isolated
-    processedText = processedText.replaceAll('\u0644\u0622', '\uFEF5'); // Mad
-    processedText = processedText.replaceAll('\u0644\u0623', '\uFEF7'); // Hamza Top
-    processedText = processedText.replaceAll('\u0644\u0625', '\uFEF9'); // Hamza Bottom
 
-    List<int> codes = processedText.codeUnits;
-    List<int> result = [];
+    List<int> codes = text.codeUnits;
+    List<int> shapedCodes = [];
 
     for (int i = 0; i < codes.length; i++) {
       int current = codes[i];
       if (!_forms.containsKey(current)) {
-        result.add(current);
+        shapedCodes.add(current);
         continue;
       }
 
-      bool prevConnects = i > 0 && _canConnectLeft(codes[i - 1]);
-      bool nextConnects = i < codes.length - 1 && _canConnectRight(codes[i + 1]);
+      bool hasRightConn = i > 0 && _connectsToLeft(codes[i - 1]) && _connectsToRight(current);
+      bool hasLeftConn = i < codes.length - 1 && _connectsToLeft(current) && _connectsToRight(codes[i + 1]);
 
       int formIndex;
-      if (prevConnects && nextConnects) {
-        formIndex = 3; // Medial
-      } else if (prevConnects) {
-        formIndex = 1; // Final
-      } else if (nextConnects) {
-        formIndex = 2; // Initial
-      } else {
-        formIndex = 0; // Isolated
-      }
+      if (hasRightConn && hasLeftConn) formIndex = 3; // میانی
+      else if (hasRightConn) formIndex = 1; // پایانی
+      else if (hasLeftConn) formIndex = 2; // آغازی
+      else formIndex = 0; // تنها
 
-      result.add(_forms[current]![formIndex]);
+      shapedCodes.add(_forms[current]![formIndex]);
     }
 
-    // For PDF, we often need to REVERSE the string because we will use LTR direction 
-    // to avoid the library's broken RTL handling with shaped characters.
-    return String.fromCharCodes(result.reversed.toList());
+    List<int> reversed = shapedCodes.reversed.toList();
+    
+    // اصلاح پرانتزها
+    for (int i = 0; i < reversed.length; i++) {
+      if (reversed[i] == 0x28) reversed[i] = 0x29;
+      else if (reversed[i] == 0x29) reversed[i] = 0x28;
+    }
+
+    // اصلاح بخش‌های LTR (اعداد و انگلیسی)
+    int j = 0;
+    while (j < reversed.length) {
+      if (_isLTR(reversed[j])) {
+        int start = j;
+        while (j < reversed.length && (_isLTR(reversed[j]) || _isLTRPunct(reversed[j], reversed, j))) {
+          j++;
+        }
+        _reverseRange(reversed, start, j - 1);
+      } else {
+        j++;
+      }
+    }
+
+    return String.fromCharCodes(reversed);
+  }
+
+  static bool _isLTR(int code) {
+    return (code >= 0x30 && code <= 0x39) || (code >= 0x41 && code <= 0x5A) || (code >= 0x61 && code <= 0x7A) || (code >= 0x06F0 && code <= 0x06F9);
+  }
+
+  static bool _isLTRPunct(int code, List<int> list, int index) {
+    if ([0x2E, 0x2C, 0x2F, 0x2D, 0x3A].contains(code)) {
+      if (index + 1 < list.length && _isLTR(list[index + 1])) return true;
+    }
+    return false;
+  }
+
+  static void _reverseRange(List<int> list, int start, int end) {
+    while (start < end) {
+      int temp = list[start];
+      list[start] = list[end];
+      list[end] = temp;
+      start++;
+      end--;
+    }
   }
 }

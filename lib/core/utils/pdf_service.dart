@@ -8,212 +8,152 @@ import 'formatters.dart';
 import 'persian_text_shaper.dart';
 
 class PdfService {
-  static String fixPersian(String text) {
-    if (text.isEmpty) return "";
+  static const PdfColor primaryColor = PdfColors.blueGrey800;
+  static const PdfColor accentColor = PdfColors.blueGrey50;
+
+  static String _fix(String? text) {
+    if (text == null || text.isEmpty) return "";
     return PersianTextShaper.shape(text);
   }
 
+  static Future<pw.Font> _getFont({bool isBold = false}) async {
+    // اگر فایل bold دارید نام آن را اینجا اصلاح کنید
+    final fontPath = isBold ? "assets/fonts/iranyekan.ttf" : "assets/fonts/iranyekan.ttf";
+    final fontData = await rootBundle.load(fontPath);
+    return pw.Font.ttf(fontData);
+  }
+
   static Future<pw.ThemeData> _getTheme() async {
-    final fontData = await rootBundle.load("assets/fonts/iranyekan.ttf");
-    final ttf = pw.Font.ttf(fontData);
-    // تنظیم فونت برای تمامی استایل‌ها جهت جلوگیری از نمایش مربع (Boxes)
+    final font = await _getFont();
+    final boldFont = await _getFont(isBold: true);
     return pw.ThemeData.withFont(
-      base: ttf,
-      bold: ttf,
-      italic: ttf,
-      boldItalic: ttf,
+      base: font,
+      bold: boldFont,
     );
   }
 
+  /// چاپ فاکتور تک سرویس (A5)
   static Future<void> generateAndPrintService(LoadService service) async {
     final pdf = pw.Document();
     final theme = await _getTheme();
-
-    final bool isTransportOnly = service.purchasePricePerTon == 0;
+    final isTransportOnly = service.purchasePricePerTon == 0;
 
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a5,
         theme: theme,
-        build: (pw.Context context) {
-          return pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
-            child: pw.Container(
-              padding: const pw.EdgeInsets.all(10),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: PdfColors.grey, width: 1),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => pw.Directionality(
+          textDirection: pw.TextDirection.ltr,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              _buildHeader("صورت‌حساب حمل بار"),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Center(
-                    child: pw.Text(
-                      fixPersian("صورت‌حساب باربری خاتون بار"),
-                      style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-                    ),
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(fixPersian("شماره: ${service.id.toPersianDigit()}"), style: const pw.TextStyle(fontSize: 9)),
-                      pw.Text(fixPersian("تاریخ: ${service.date.toPersianDate()}"), style: const pw.TextStyle(fontSize: 9)),
-                    ],
-                  ),
-                  pw.Divider(thickness: 1),
-                  
-                  _buildPdfRow("طرف حساب (مشتری):", service.customer?.fullName ?? "---"),
-                  _buildPdfRow("نام راننده:", service.driver.fullName),
-                  _buildPdfRow("خودرو:", service.car.name),
-                  
-                  pw.SizedBox(height: 5),
-                  pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-                  
-                  _buildPdfRow("نوع بار:", service.loadType.name),
-                  _buildPdfRow("مبدا:", service.origin),
-                  _buildPdfRow("مقصد:", service.destination),
-                  _buildPdfRow("وزن بار:", "${service.weight.toString().toPersianDigit()} تن"),
-                  
-                  pw.SizedBox(height: 5),
-                  pw.Divider(thickness: 0.5, color: PdfColors.grey300),
-
-                  if (!isTransportOnly)
-                    _buildPdfRow("فی خرید (هر تن):", "${AppFormatters.formatCurrency(service.purchasePricePerTon)} تومان"),
-                  
-                  _buildPdfRow("فی حمل (هر تن):", "${AppFormatters.formatCurrency(service.transportPricePerTon)} تومان"),
-                  
-                  pw.Container(
-                    margin: const pw.EdgeInsets.only(top: 15),
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                    child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text(
-                          fixPersian(isTransportOnly ? "کل کرایه حمل قابل پرداخت:" : "جمع کل (خرید + حمل):"), 
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)
-                        ),
-                        pw.Text(
-                          fixPersian("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  pw.Spacer(),
-                  
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-                    children: [
-                      pw.Text(fixPersian("امضا راننده"), style: const pw.TextStyle(fontSize: 9)),
-                      pw.Text(fixPersian("مهر و امضا باربری"), style: const pw.TextStyle(fontSize: 9)),
-                    ],
-                  ),
+                  _infoText("شماره فاکتور:", service.id.toString().toPersianDigit()),
+                  _infoText("تاریخ:", service.date.toPersianDate()),
                 ],
               ),
-            ),
-          );
-        },
+              pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+              pw.SizedBox(height: 10),
+              
+              _buildSectionTitle("اطلاعات طرفین"),
+              _rowInfo("مشتری:", service.customer?.fullName ?? "---"),
+              _rowInfo("راننده:", service.driver.fullName),
+              _rowInfo("خودرو:", service.car.name),
+              
+              pw.SizedBox(height: 10),
+              _buildSectionTitle("جزئیات بار"),
+              _rowInfo("نوع بار:", service.loadType.name),
+              _rowInfo("مسیر:", "${service.origin} به ${service.destination}"),
+              _rowInfo("وزن خالص:", "${service.weight.toString().toPersianDigit()} تن"),
+              
+              pw.SizedBox(height: 10),
+              _buildSectionTitle("محاسبات مالی"),
+              if (!isTransportOnly)
+                _rowInfo("فی خرید:", "${AppFormatters.formatCurrency(service.purchasePricePerTon)} تومان"),
+              _rowInfo("فی حمل:", "${AppFormatters.formatCurrency(service.transportPricePerTon)} تومان"),
+              
+              pw.Spacer(),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: accentColor,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(_fix("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                    pw.Text(_fix(isTransportOnly ? "مبلغ قابل پرداخت:" : "جمع کل فاکتور:"),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              _buildSignatures(),
+              pw.Spacer(),
+              _buildFooter(),
+            ],
+          ),
+        ),
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Invoice-${service.id}',
-    );
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: 'Service-${service.id}');
   }
 
+  /// چاپ صورت‌حساب مشتری (A4)
   static Future<void> generateAndPrintCustomerLedger(Customer customer, List<LoadService> services, List<Payment> payments) async {
     final pdf = pw.Document();
     final theme = await _getTheme();
 
     double totalDebt = services.fold(0, (sum, s) => sum + s.totalServicePriceForCustomer);
     double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
-    double balance = totalDebt - totalPaid;
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: theme,
-        header: (context) => pw.Directionality(
-          textDirection: pw.TextDirection.rtl,
-          child: pw.Column(
-            children: [
-              pw.Center(child: pw.Text(fixPersian("صورت‌حساب مالی مشتری"), style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(height: 10),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(fixPersian("مشتری: ${customer.fullName}")),
-                  pw.Text(fixPersian("تاریخ گزارش: ${DateTime.now().toPersianDate()}")),
-                ],
-              ),
-              pw.Divider(),
-            ],
-          ),
-        ),
+        header: (context) => _buildHeader("صورت‌حساب مالی مشتری: ${customer.fullName}"),
+        footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
         build: (context) => [
           pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
+            textDirection: pw.TextDirection.ltr,
             child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.SizedBox(height: 10),
-                pw.Text(fixPersian("لیست سرویس‌ها"), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.TableHelper.fromTextArray(
-                  headers: ['ردیف', 'تاریخ', 'نوع بار', 'وزن (تن)', 'کد سفارش', 'مبلغ کل (تومان)'].map((e) => fixPersian(e)).toList(),
-                  data: List.generate(services.length, (index) {
-                    final s = services[index];
-                    return [
-                      (index + 1).toString().toPersianDigit(),
-                      s.date.toPersianDate(),
-                      s.loadType.name,
-                      s.weight.toString().toPersianDigit(),
-                      s.orderCode.toPersianDigit(),
-                      AppFormatters.formatCurrency(s.totalServicePriceForCustomer),
-                    ].map((e) => fixPersian(e)).toList();
-                  }),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                  cellStyle: const pw.TextStyle(fontSize: 9),
+                _buildSectionTitle("لیست سرویس‌های انجام شده"),
+                _buildTable(
+                  ['ردیف', 'تاریخ', 'نوع بار', 'وزن', 'مبلغ کل'],
+                  services.asMap().entries.map((e) => [
+                    (e.key + 1).toString().toPersianDigit(),
+                    e.value.date.toPersianDate(),
+                    e.value.loadType.name,
+                    e.value.weight.toString().toPersianDigit(),
+                    AppFormatters.formatCurrency(e.value.totalServicePriceForCustomer),
+                  ]).toList(),
                 ),
                 pw.SizedBox(height: 20),
-                pw.Text(fixPersian("لیست پرداختی‌ها"), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.TableHelper.fromTextArray(
-                  headers: ['ردیف', 'تاریخ', 'روش پرداخت', 'بانک/شماره چک', 'توضیحات', 'مبلغ (تومان)'].map((e) => fixPersian(e)).toList(),
-                  data: List.generate(payments.length, (index) {
-                    final p = payments[index];
-                    String info = "";
-                    if (p.method == PaymentMethod.check) {
-                      info = "${p.bankName ?? ''} - ${p.checkNumber ?? ''}";
-                    } else if (p.method == PaymentMethod.card || p.method == PaymentMethod.sheba) {
-                      info = p.bankName ?? "";
-                    }
-                    return [
-                      (index + 1).toString().toPersianDigit(),
-                      p.date.toPersianDate(),
-                      _getPaymentMethodName(p.method),
-                      info,
-                      p.description ?? "",
-                      AppFormatters.formatCurrency(p.amount),
-                    ].map((e) => fixPersian(e)).toList();
-                  }),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                  cellStyle: const pw.TextStyle(fontSize: 9),
+                _buildSectionTitle("لیست دریافتی‌ها"),
+                _buildTable(
+                  ['ردیف', 'تاریخ', 'روش', 'توضیحات/بانک', 'مبلغ'],
+                  payments.asMap().entries.map((e) => [
+                    (e.key + 1).toString().toPersianDigit(),
+                    e.value.date.toPersianDate(),
+                    _getPaymentMethodName(e.value.method),
+                    e.value.bankName ?? "-",
+                    AppFormatters.formatCurrency(e.value.amount),
+                  ]).toList(),
                 ),
                 pw.SizedBox(height: 30),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(), color: PdfColors.grey100),
-                  child: pw.Column(
-                    children: [
-                      _buildSummaryRow("جمع کل بدهی سرویس‌ها:", totalDebt),
-                      _buildSummaryRow("جمع کل دریافتی‌ها:", totalPaid),
-                      pw.Divider(),
-                      _buildSummaryRow("مانده بدهی نهایی:", balance, isBold: true),
-                    ],
-                  ),
-                ),
+                _buildSummaryBox("بدهی کل:", totalDebt, "دریافتی کل:", totalPaid),
               ],
             ),
           ),
@@ -221,102 +161,55 @@ class PdfService {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Ledger-${customer.fullName}',
-    );
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: 'CustomerLedger-${customer.fullName}');
   }
 
+  /// چاپ صورت‌حساب فروشنده (A4)
   static Future<void> generateAndPrintSellerLedger(Seller seller, List<LoadService> services, List<Payment> payments) async {
     final pdf = pw.Document();
     final theme = await _getTheme();
 
     double totalDebt = services.fold(0, (sum, s) => sum + s.totalPurchaseAmount);
     double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
-    double balance = totalDebt - totalPaid;
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         theme: theme,
-        header: (context) => pw.Directionality(
-          textDirection: pw.TextDirection.rtl,
-          child: pw.Column(
-            children: [
-              pw.Center(child: pw.Text(fixPersian("صورت‌حساب مالی فروشنده"), style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(height: 10),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(fixPersian("فروشنده: ${seller.name}")),
-                  pw.Text(fixPersian("تاریخ گزارش: ${DateTime.now().toPersianDate()}")),
-                ],
-              ),
-              pw.Divider(),
-            ],
-          ),
-        ),
+        header: (context) => _buildHeader("صورت‌حساب مالی فروشنده: ${seller.name}"),
+        footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
         build: (context) => [
           pw.Directionality(
-            textDirection: pw.TextDirection.rtl,
+            textDirection: pw.TextDirection.ltr,
             child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.SizedBox(height: 10),
-                pw.Text(fixPersian("لیست بارها"), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.TableHelper.fromTextArray(
-                  headers: ['ردیف', 'تاریخ', 'نوع بار', 'وزن (تن)', 'کد سفارش', 'مبلغ خرید (تومان)'].map((e) => fixPersian(e)).toList(),
-                  data: List.generate(services.length, (index) {
-                    final s = services[index];
-                    return [
-                      (index + 1).toString().toPersianDigit(),
-                      s.date.toPersianDate(),
-                      s.loadType.name,
-                      s.weight.toString().toPersianDigit(),
-                      s.orderCode.toPersianDigit(),
-                      AppFormatters.formatCurrency(s.totalPurchaseAmount),
-                    ].map((e) => fixPersian(e)).toList();
-                  }),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                  cellStyle: const pw.TextStyle(fontSize: 9),
+                _buildSectionTitle("لیست بارهای خریداری شده"),
+                _buildTable(
+                  ['ردیف', 'تاریخ', 'نوع بار', 'وزن', 'مبلغ خرید'],
+                  services.asMap().entries.map((e) => [
+                    (e.key + 1).toString().toPersianDigit(),
+                    e.value.date.toPersianDate(),
+                    e.value.loadType.name,
+                    e.value.weight.toString().toPersianDigit(),
+                    AppFormatters.formatCurrency(e.value.totalPurchaseAmount),
+                  ]).toList(),
                 ),
                 pw.SizedBox(height: 20),
-                pw.Text(fixPersian("لیست پرداخت‌های ما"), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                pw.TableHelper.fromTextArray(
-                  headers: ['ردیف', 'تاریخ', 'روش پرداخت', 'بانک/شماره چک', 'توضیحات', 'مبلغ (تومان)'].map((e) => fixPersian(e)).toList(),
-                  data: List.generate(payments.length, (index) {
-                    final p = payments[index];
-                    String info = "";
-                    if (p.method == PaymentMethod.check) {
-                      info = "${p.bankName ?? ''} - ${p.checkNumber ?? ''}";
-                    } else if (p.method == PaymentMethod.card || p.method == PaymentMethod.sheba) {
-                      info = p.bankName ?? "";
-                    }
-                    return [
-                      (index + 1).toString().toPersianDigit(),
-                      p.date.toPersianDate(),
-                      _getPaymentMethodName(p.method),
-                      info,
-                      p.description ?? "",
-                      AppFormatters.formatCurrency(p.amount),
-                    ].map((e) => fixPersian(e)).toList();
-                  }),
-                  headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
-                  cellStyle: const pw.TextStyle(fontSize: 9),
+                _buildSectionTitle("لیست پرداختی‌های ما به فروشنده"),
+                _buildTable(
+                  ['ردیف', 'تاریخ', 'روش', 'توضیحات/بانک', 'مبلغ'],
+                  payments.asMap().entries.map((e) => [
+                    (e.key + 1).toString().toPersianDigit(),
+                    e.value.date.toPersianDate(),
+                    _getPaymentMethodName(e.value.method),
+                    e.value.bankName ?? "-",
+                    AppFormatters.formatCurrency(e.value.amount),
+                  ]).toList(),
                 ),
                 pw.SizedBox(height: 30),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(border: pw.Border.all(), color: PdfColors.grey100),
-                  child: pw.Column(
-                    children: [
-                      _buildSummaryRow("جمع کل بدهی ما:", totalDebt),
-                      _buildSummaryRow("جمع کل پرداختی‌ها:", totalPaid),
-                      pw.Divider(),
-                      _buildSummaryRow("مانده بدهی نهایی ما:", balance, isBold: true),
-                    ],
-                  ),
-                ),
+                _buildSummaryBox("جمع کل خرید:", totalDebt, "جمع پرداختی‌ها:", totalPaid, balanceLabel: "مانده طلب فروشنده:"),
               ],
             ),
           ),
@@ -324,41 +217,157 @@ class PdfService {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'SellerLedger-${seller.name}',
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: 'SellerLedger-${seller.name}');
+  }
+
+  // --- متدهای کمکی برای طراحی ---
+
+  static pw.Widget _buildHeader(String title) {
+    return pw.Column(
+      children: [
+        pw.Center(
+          child: pw.Text(_fix(title),
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Center(child: pw.Text(_fix("مدیریت حمل‌ونقل خاتون بار"), style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700))),
+        pw.Divider(thickness: 1.5, color: primaryColor),
+      ],
+    );
+  }
+
+  static pw.Widget _buildSectionTitle(String title) {
+    return pw.Container(
+      width: double.infinity,
+      margin: const pw.EdgeInsets.only(top: 10, bottom: 5),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(right: pw.BorderSide(color: primaryColor, width: 3)),
+      ),
+      child: pw.Text(_fix(title), 
+          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: primaryColor)),
+    );
+  }
+
+  static pw.Widget _rowInfo(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.end,
+        children: [
+          pw.Expanded(
+            child: pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(_fix(value), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+            ),
+          ),
+          pw.SizedBox(width: 10),
+          pw.SizedBox(
+            width: 60,
+            child: pw.Text(_fix(label), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _infoText(String label, String value) {
+    return pw.Text(_fix("$label $value"), style: const pw.TextStyle(fontSize: 8));
+  }
+
+  static pw.Widget _buildTable(List<String> headers, List<List<String>> data) {
+    return pw.TableHelper.fromTextArray(
+      headers: headers.reversed.map((e) => _fix(e)).toList(),
+      data: data.map((row) => row.reversed.map((cell) => _fix(cell)).toList()).toList(),
+      border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+      headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: PdfColors.white),
+      headerDecoration: const pw.BoxDecoration(color: primaryColor),
+      cellStyle: const pw.TextStyle(fontSize: 8),
+      cellAlignment: pw.Alignment.center,
+    );
+  }
+
+  static pw.Widget _buildSummaryBox(String label1, double amount1, String label2, double amount2, {String balanceLabel = "مانده نهایی:"}) {
+    final balance = amount1 - amount2;
+    return pw.Align(
+      alignment: pw.Alignment.centerRight,
+      child: pw.Container(
+        width: 220,
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(
+          color: accentColor,
+          border: pw.Border.all(color: primaryColor, width: 0.5),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+        ),
+        child: pw.Column(
+          children: [
+            _summaryRow(label1, amount1),
+            _summaryRow(label2, amount2),
+            pw.Divider(color: PdfColors.grey400, thickness: 0.5),
+            _summaryRow(balanceLabel, balance, isBold: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget _summaryRow(String label, double amount, {bool isBold = false}) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(_fix("${AppFormatters.formatCurrency(amount)} تومان"),
+            style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : null)),
+        pw.Text(_fix(label), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : null)),
+      ],
+    );
+  }
+
+  static pw.Widget _buildSignatures() {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 20),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Column(
+            children: [
+              pw.Text(_fix("مهر و امضای باربری"), style: const pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 35),
+            ],
+          ),
+          pw.Column(
+            children: [
+              pw.Text(_fix("امضای مشتری / راننده"), style: const pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 35),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _buildFooter({int? pageNumber, int? totalPages}) {
+    return pw.Column(
+      children: [
+        pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(_fix(DateTime.now().toPersianDate()), style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+            if (pageNumber != null)
+              pw.Text(_fix("صفحه $pageNumber از $totalPages"), style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+            pw.Text(_fix("سامانه مدیریت خاتون بار"), style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600)),
+          ],
+        ),
+      ],
     );
   }
 
   static String _getPaymentMethodName(PaymentMethod method) {
     switch (method) {
-      case PaymentMethod.cash: return fixPersian("نقدی");
-      case PaymentMethod.check: return fixPersian("چک");
-      case PaymentMethod.card: return fixPersian("کارت");
-      case PaymentMethod.sheba: return fixPersian("شبا");
+      case PaymentMethod.cash: return "نقدی";
+      case PaymentMethod.check: return "چک";
+      case PaymentMethod.card: return "کارت";
+      case PaymentMethod.sheba: return "شبا";
     }
-  }
-
-  static pw.Widget _buildSummaryRow(String label, double amount, {bool isBold = false}) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      children: [
-        pw.Text(fixPersian(label), style: pw.TextStyle(fontWeight: isBold ? pw.FontWeight.bold : null)),
-        pw.Text(fixPersian("${AppFormatters.formatCurrency(amount)} تومان"), style: pw.TextStyle(fontWeight: isBold ? pw.FontWeight.bold : null)),
-      ],
-    );
-  }
-
-  static pw.Widget _buildPdfRow(String label, String value) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 3),
-      child: pw.Row(
-        children: [
-          pw.Text(fixPersian(label), style: const pw.TextStyle(color: PdfColors.grey700, fontSize: 10)),
-          pw.SizedBox(width: 5),
-          pw.Text(fixPersian(value), style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-        ],
-      ),
-    );
   }
 }
