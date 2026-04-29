@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../models/models.dart';
+import '../../widgets/phone_input.dart';
 import '../customer_ledger_screen.dart';
 
 class ManageCustomersScreen extends StatefulWidget {
@@ -39,14 +40,19 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('افزودن مشتری (گیرنده) جدید', style: TextStyle(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'نام')),
-            TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'نام خانوادگی')),
-            TextField(controller: villageController, decoration: const InputDecoration(labelText: 'روستا/شهر')),
-            TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'شماره تلفن'), keyboardType: TextInputType.phone),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'نام')),
+              const SizedBox(height: 8),
+              TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'نام خانوادگی')),
+              const SizedBox(height: 8),
+              TextField(controller: villageController, decoration: const InputDecoration(labelText: 'روستا/شهر')),
+              const SizedBox(height: 16),
+              PhoneInput(controller: phoneController, label: 'شماره تلفن'),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),

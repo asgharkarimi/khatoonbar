@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../models/models.dart';
+import '../../widgets/phone_input.dart';
 
 class ManageDriversScreen extends StatefulWidget {
   const ManageDriversScreen({super.key});
@@ -37,13 +38,17 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('افزودن راننده جدید', style: TextStyle(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'نام')),
-            TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'نام خانوادگی')),
-            TextField(controller: phoneController, decoration: const InputDecoration(labelText: 'شماره تلفن'), keyboardType: TextInputType.phone),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'نام')),
+              const SizedBox(height: 8),
+              TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'نام خانوادگی')),
+              const SizedBox(height: 16),
+              PhoneInput(controller: phoneController, label: 'شماره همراه راننده'),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
