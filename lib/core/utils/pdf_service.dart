@@ -10,6 +10,7 @@ import 'persian_text_shaper.dart';
 class PdfService {
   static const PdfColor primaryColor = PdfColors.blueGrey800;
   static const PdfColor accentColor = PdfColors.blueGrey50;
+  static const PdfColor secondaryColor = PdfColors.blue800; // رنگ جدید برای بخش‌های درخواستی
 
   static String _fix(String? text) {
     if (text == null || text.isEmpty) return "";
@@ -83,15 +84,15 @@ class PdfService {
                 decoration: pw.BoxDecoration(
                   color: accentColor,
                   borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
-                  border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+                  border: pw.Border.all(color: secondaryColor, width: 0.5),
                 ),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(_fix("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: secondaryColor)),
                     pw.Text(_fix(isTransportOnly ? "مبلغ قابل پرداخت:" : "جمع کل فاکتور:"),
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: secondaryColor)),
                   ],
                 ),
               ),
@@ -242,10 +243,13 @@ class PdfService {
       margin: const pw.EdgeInsets.only(top: 10, bottom: 5),
       padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: const pw.BoxDecoration(
-        border: pw.Border(right: pw.BorderSide(color: primaryColor, width: 3)),
+        border: pw.Border(right: pw.BorderSide(color: secondaryColor, width: 3)),
       ),
-      child: pw.Text(_fix(title), 
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: primaryColor)),
+      child: pw.Align(
+        alignment: pw.Alignment.centerRight,
+        child: pw.Text(_fix(title), 
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: secondaryColor)),
+      ),
     );
   }
 
@@ -264,7 +268,7 @@ class PdfService {
           pw.SizedBox(width: 10),
           pw.SizedBox(
             width: 60,
-            child: pw.Text(_fix(label), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+            child: pw.Text(_fix(label), style: const pw.TextStyle(fontSize: 9, color: secondaryColor)),
           ),
         ],
       ),
