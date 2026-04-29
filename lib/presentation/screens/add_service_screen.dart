@@ -40,6 +40,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   final TextEditingController _loadingTipController = TextEditingController();
   final TextEditingController _unloadingTipController = TextEditingController();
   
+  double _commission = 0; 
   List<OtherExpense> _otherExpenses = [];
 
   double _weight = 0;
@@ -90,6 +91,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _fuelController.text = s.expenses.fuelCost.toString();
       _loadingTipController.text = s.expenses.loadingTip.toString();
       _unloadingTipController.text = s.expenses.unloadingTip.toString();
+      _commission = s.expenses.commission;
       _otherExpenses = List.from(s.expenses.otherExpenses);
     });
   }
@@ -137,9 +139,12 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () async {
-                  final picker = ImagePicker();
-                  final picked = await picker.pickImage(source: ImageSource.gallery);
-                  if (picked != null) setDialogState(() => imagePath = picked.path);
+                  final source = await _showImageSourceDialog();
+                  if (source != null) {
+                    final picker = ImagePicker();
+                    final picked = await picker.pickImage(source: source);
+                    if (picked != null) setDialogState(() => imagePath = picked.path);
+                  }
                 },
                 icon: const Icon(Icons.image_outlined),
                 label: Text(imagePath == null ? 'انتخاب رسید' : 'رسید انتخاب شد'),
@@ -169,13 +174,58 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
+  Future<ImageSource?> _showImageSourceDialog() async {
+    return await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('انتخاب منبع تصویر', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildSourceOption(Icons.camera_alt_outlined, 'دوربین', ImageSource.camera),
+                _buildSourceOption(Icons.photo_library_outlined, 'گالری', ImageSource.gallery),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceOption(IconData icon, String label, ImageSource source) {
+    return InkWell(
+      onTap: () => Navigator.pop(context, source),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(color: Theme.of(context).primaryColor.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(icon, color: Theme.of(context).primaryColor, size: 30),
+          ),
+          const SizedBox(height: 8),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickPurchaseInvoice() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      setState(() {
-        _purchaseInvoiceImagePath = picked.path;
-      });
+    final source = await _showImageSourceDialog();
+    if (source != null) {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: source);
+      if (picked != null) {
+        setState(() {
+          _purchaseInvoiceImagePath = picked.path;
+        });
+      }
     }
   }
 
@@ -348,7 +398,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     double fixedExpensesSum = (double.tryParse(_tollController.text) ?? 0) +
                              (double.tryParse(_fuelController.text) ?? 0) +
                              (double.tryParse(_loadingTipController.text) ?? 0) +
-                             (double.tryParse(_unloadingTipController.text) ?? 0);
+                             (double.tryParse(_unloadingTipController.text) ?? 0) +
+                             _commission;
     double totalExpenses = fixedExpensesSum + otherExpensesSum;
     double netProfit = totalTransport - totalExpenses;
 
@@ -442,8 +493,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         const SizedBox(height: 16),
                         OutlinedButton.icon(
                           onPressed: _pickPurchaseInvoice,
-                          icon: Icon(_purchaseInvoiceImagePath == null ? Icons.add_photo_alternate_outlined : Icons.check_circle_outline),
-                          label: Text(_purchaseInvoiceImagePath == null ? 'پیوست فاکتور خرید' : 'فاکتور خرید انتخاب شد'),
+                          icon: Icon(_purchaseInvoiceImagePath == null ? Icons.attach_file_outlined : Icons.check_circle_outline),
+                          label: Text(_purchaseInvoiceImagePath == null ? 'بارگذاری مدارک' : 'مدارک بارگذاری شد'),
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(double.infinity, 50),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -462,7 +513,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                                 const SizedBox(width: 8),
                                 TextButton(
                                   onPressed: () => setState(() => _purchaseInvoiceImagePath = null),
-                                  child: const Text('حذف فاکتور', style: TextStyle(color: Colors.red, fontSize: 12)),
+                                  child: const Text('حذف مدارک', style: TextStyle(color: Colors.red, fontSize: 12)),
                                 )
                               ],
                             ),
@@ -474,6 +525,12 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       title: 'مخارج و هزینه‌های سرویس',
                       icon: Icons.receipt_long_outlined,
                       children: [
+                        AmountInput(
+                          label: 'هزینه کمیسیون (الزامی)', 
+                          initialValue: _commission, 
+                          onChanged: (v) => setState(() => _commission = v),
+                        ),
+                        const SizedBox(height: 12),
                         Row(children: [
                           Expanded(child: _buildTextField(controller: _fuelController, label: 'سوخت', icon: Icons.local_gas_station_outlined, keyboardType: TextInputType.number)),
                           const SizedBox(width: 8),
@@ -563,11 +620,20 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType keyboardType = TextInputType.text, bool readOnly = false}) {
+  Widget _buildTextField({
+    required TextEditingController controller, 
+    required String label, 
+    required IconData icon, 
+    TextInputType keyboardType = TextInputType.text, 
+    bool readOnly = false,
+    String? Function(String?)? validator,
+  }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       readOnly: readOnly,
+      validator: validator,
+      onChanged: (v) => setState(() {}),
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
     );
   }
@@ -613,6 +679,13 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   }
 
   Future<void> _saveService() async {
+    if (!_formKey.currentState!.validate() || _commission == 0) {
+      if (_commission == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ کمیسیون را وارد کنید')));
+      }
+      return;
+    }
+
     if (_selectedDriver == null || _selectedCar == null || _selectedSeller == null || _selectedLoadType == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفا تمامی موارد ضروری را انتخاب کنید')));
       return;
@@ -623,6 +696,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       tollCost: double.tryParse(_tollController.text) ?? 0,
       loadingTip: double.tryParse(_loadingTipController.text) ?? 0,
       unloadingTip: double.tryParse(_unloadingTipController.text) ?? 0,
+      commission: _commission,
       otherExpenses: _otherExpenses,
     );
 

@@ -226,6 +226,7 @@ class ServiceExpenses {
   double loadingTip;
   double unloadingTip;
   double disinfectionCost;
+  double commission; // فیلد جدید کمیسیون
   List<OtherExpense> otherExpenses;
 
   ServiceExpenses({
@@ -235,12 +236,13 @@ class ServiceExpenses {
     this.loadingTip = 0,
     this.unloadingTip = 0,
     this.disinfectionCost = 0,
+    this.commission = 0,
     this.otherExpenses = const [],
   });
 
   double get total {
     double othersTotal = otherExpenses.fold(0, (sum, item) => sum + item.amount);
-    return billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + othersTotal;
+    return billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + othersTotal;
   }
 
   Map<String, dynamic> toMap() => {
@@ -250,6 +252,7 @@ class ServiceExpenses {
     'loadingTip': loadingTip,
     'unloadingTip': unloadingTip,
     'disinfectionCost': disinfectionCost,
+    'commission': commission,
     'otherExpenses': otherExpenses.map((e) => e.toMap()).toList(),
   };
 
@@ -262,6 +265,7 @@ class ServiceExpenses {
       loadingTip: (map['loadingTip'] ?? 0 as num).toDouble(),
       unloadingTip: (map['unloadingTip'] ?? 0 as num).toDouble(),
       disinfectionCost: (map['disinfectionCost'] ?? 0 as num).toDouble(),
+      commission: (map['commission'] ?? 0 as num).toDouble(),
       otherExpenses: othersList.map((e) => OtherExpense.fromMap(Map<String, dynamic>.from(e))).toList(),
     );
   }
