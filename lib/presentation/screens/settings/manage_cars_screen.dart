@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../models/models.dart';
+import '../../widgets/iranian_plate_input.dart';
 
 class ManageCarsScreen extends StatefulWidget {
   const ManageCarsScreen({super.key});
@@ -30,6 +31,7 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
 
   void _showAddCarDialog() {
     final nameController = TextEditingController();
+    String plateValue = "";
 
     showDialog(
       context: context,
@@ -37,8 +39,18 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
         title: const Text('افزودن ماشین جدید', style: TextStyle(fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'نام ماشین (مثلاً فوتون)')),
+            TextField(
+              controller: nameController, 
+              decoration: const InputDecoration(labelText: 'نام ماشین (مثلاً فوتون)'),
+            ),
+            const SizedBox(height: 16),
+            const Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            IranianPlateInput(
+              onChanged: (v) => plateValue = v,
+            ),
           ],
         ),
         actions: [
@@ -49,6 +61,7 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                 final newCar = Car(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameController.text,
+                  plate: plateValue,
                 );
                 await DatabaseHelper.instance.insertCar(newCar);
                 if (mounted) Navigator.pop(context);
@@ -87,6 +100,12 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                           child: const Icon(Icons.local_shipping, color: Colors.orange),
                         ),
                         title: Text(car.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: car.plate != null && car.plate!.isNotEmpty 
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Text("پلاک: ${car.plate}"),
+                              )
+                            : null,
                         trailing: IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                           onPressed: () async {

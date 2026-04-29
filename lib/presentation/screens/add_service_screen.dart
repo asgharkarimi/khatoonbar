@@ -5,6 +5,7 @@ import '../../core/data/service_repository.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import '../widgets/amount_input.dart';
+import '../widgets/iranian_plate_input.dart';
 
 class AddServiceScreen extends StatefulWidget {
   final LoadService? serviceToEdit;
@@ -214,17 +215,24 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
   void _showAddCarDialog() {
     final nameController = TextEditingController();
-    final plateController = TextEditingController();
+    String plateValue = "";
     _showStyledDialog(
       title: 'خودرو جدید',
       children: [
         _buildTextField(controller: nameController, label: 'نام خودرو', icon: Icons.local_shipping),
-        const SizedBox(height: 12),
-        _buildTextField(controller: plateController, label: 'شماره پلاک', icon: Icons.badge),
+        const SizedBox(height: 16),
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 8),
+        IranianPlateInput(
+          onChanged: (v) => plateValue = v,
+        ),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
-          final newCar = Car(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text, plate: plateController.text);
+          final newCar = Car(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text, plate: plateValue);
           await _repository.saveCar(newCar);
           await _loadInitialData();
           setState(() => _selectedCar = _cars.firstWhere((c) => c.id == newCar.id));
