@@ -4,6 +4,7 @@ import 'package:persian_number_utility/persian_number_utility.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import '../../core/database/database_helper.dart'; 
 import '../../core/utils/formatters.dart';
+import '../../core/utils/pdf_service.dart';
 import '../../models/models.dart';
 import 'seller_ledger_screen.dart';
 import 'customer_ledger_screen.dart';
@@ -72,6 +73,81 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     }
   }
 
+  void _exportToPdf() async {
+    bool success = false;
+    String title = "";
+    List<String> headers = [];
+    List<List<String>> data = [];
+
+    if (_tabController.index == 0) {
+      title = "گزارش بدهی مشتریان";
+      headers = ["ردیف", "نام مشتری", "مانده بدهی"];
+      int i = 1;
+      for (var c in _customers) {
+        final debt = _services.where((s) => s.customer?.id == c.id).fold<double>(0.0, (sum, s) => sum + s.remainingCustomerDebt);
+        if (_currentFilter == AccountFilter.inDebt && debt <= 0) continue;
+        if (_currentFilter == AccountFilter.settled && (debt > 0 || !_services.any((s) => s.customer?.id == c.id))) continue;
+        data.add([
+          (i++).toString().toPersianDigit(),
+          c.fullName,
+          AppFormatters.formatCurrency(debt) + " تومان",
+        ]);
+      }
+    } else if (_tabController.index == 1) {
+      title = "گزارش وضعیت حساب با شرکت‌ها";
+      headers = ["ردیف", "نام شرکت", "وضعیت حساب"];
+      int i = 1;
+      for (var s in _sellers) {
+        final sellerServices = _services.where((sel) => sel.seller.id == s.id).toList();
+        double sellerBilling = sellerServices.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
+        double sellerPaid = _allPayments
+            .where((p) => (p.sellerId == s.id || sellerServices.any((ser) => ser.id == p.serviceId)) && p.isCleared && p.type == PaymentType.toSeller)
+            .fold(0.0, (sum, p) => sum + p.amount);
+        double balance = sellerBilling - sellerPaid;
+        
+        if (_currentFilter == AccountFilter.inDebt && balance <= 0) continue;
+        if (_currentFilter == AccountFilter.settled && balance != 0) continue;
+
+        String status = balance > 0 ? "بدهکاری: ${AppFormatters.formatCurrency(balance)}" : (balance < 0 ? "بستانکاری: ${AppFormatters.formatCurrency(balance.abs())}" : "تسویه");
+        data.add([(i++).toString().toPersianDigit(), s.name, status]);
+      }
+    } else if (_tabController.index == 2) {
+      title = "گزارش سود خالص رانندگان";
+      headers = ["ردیف", "نام راننده", "مجموع سود خالص"];
+      int i = 1;
+      for (var d in _drivers) {
+        final driverServices = _services.where((s) => s.driver.id == d.id).toList();
+        if (driverServices.isEmpty && _currentFilter != AccountFilter.all) continue;
+        final totalNetIncome = driverServices.fold(0.0, (sum, s) => sum + s.netProfit);
+        data.add([(i++).toString().toPersianDigit(), d.fullName, AppFormatters.formatCurrency(totalNetIncome)]);
+      }
+    } else if (_tabController.index == 3) {
+      title = "لیست چک‌های تاریخ ${_selectedDate.formatFullDate()}";
+      headers = ["ردیف", "طرف حساب", "مبلغ", "نوع", "وضعیت"];
+      final dayChecks = _allPayments.where((p) => p.method == PaymentMethod.check && p.checkDueDate != null && Jalali.fromDateTime(p.checkDueDate!) == _selectedDate).toList();
+      int i = 1;
+      for (var c in dayChecks) {
+        data.add([
+          (i++).toString().toPersianDigit(),
+          _getTargetName(c),
+          AppFormatters.formatCurrency(c.amount),
+          c.type == PaymentType.fromCustomer ? "دریافتی" : "پرداختی",
+          c.isCleared ? "وصول شده" : "در انتظار",
+        ]);
+      }
+    }
+
+    if (data.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("دیتایی برای گزارش‌گیری در این فیلتر وجود ندارد")));
+      return;
+    }
+
+    success = await PdfService.generateAndPrintGeneralReport(title, headers, data);
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("خطا در تولید فایل PDF. لطفا دسترسی‌ها و حافظه را چک کنید.")));
+    }
+  }
+
   String _getTargetName(Payment p) {
     if (p.type == PaymentType.fromCustomer) {
       final c = _customers.firstWhere((c) => c.id == p.customerId, orElse: () => Customer(id: '', firstName: 'نامشخص', lastName: '', phone: ''));
@@ -113,6 +189,11 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       appBar: AppBar(
         title: const Text('گزارشات و دفاتر حساب'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: _exportToPdf,
+            tooltip: 'خروجی گزارش PDF',
+          ),
           if (_tabController.index != 3)
             PopupMenuButton<AccountFilter>(
               icon: const Icon(Icons.filter_list),

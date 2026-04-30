@@ -137,7 +137,7 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
       ),
       child: Card(
         color: balance > 0 ? Colors.red.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
@@ -277,10 +277,10 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: isPendingCheck ? Colors.orange.shade50.withOpacity(0.5) : Colors.white,
+      color: isPendingCheck ? Colors.orange.shade50.withValues(alpha: 0.5) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: isPendingCheck ? progressBarColor.withOpacity(0.3) : Colors.grey.shade100),
+        side: BorderSide(color: isPendingCheck ? progressBarColor.withValues(alpha: 0.3) : Colors.grey.shade100),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -288,7 +288,7 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
           children: [
             ListTile(
               leading: CircleAvatar(
-                backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.green.shade100,
+                backgroundColor: isPendingCheck ? progressBarColor.withValues(alpha: 0.1) : Colors.green.shade100,
                 child: Icon(
                   p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, 
                   color: isPendingCheck ? progressBarColor : Colors.green
