@@ -5,8 +5,21 @@ class Driver {
   final String firstName;
   final String lastName;
   final String phone;
+  // فیلدهای جدید اطلاعات بانکی
+  final String? bankName;
+  final String? accountNumber;
+  final String? accountOwner;
 
-  Driver({required this.id, required this.firstName, required this.lastName, required this.phone});
+  Driver({
+    required this.id, 
+    required this.firstName, 
+    required this.lastName, 
+    required this.phone,
+    this.bankName,
+    this.accountNumber,
+    this.accountOwner,
+  });
+
   String get fullName => "$firstName $lastName";
 
   @override
@@ -22,6 +35,9 @@ class Driver {
     'firstName': firstName,
     'lastName': lastName,
     'phone': phone,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountOwner': accountOwner,
   };
 
   factory Driver.fromMap(Map<String, dynamic> map) => Driver(
@@ -29,6 +45,9 @@ class Driver {
     firstName: map['firstName'],
     lastName: map['lastName'],
     phone: map['phone'],
+    bankName: map['bankName'],
+    accountNumber: map['accountNumber'],
+    accountOwner: map['accountOwner'],
   );
 }
 

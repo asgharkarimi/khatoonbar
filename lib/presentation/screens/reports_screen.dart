@@ -136,7 +136,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: false, // تغییر یافت برای پر کردن تمام عرض صفحه به طور مساوی
+          isScrollable: false,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.group_outlined)),
             Tab(text: 'شرکت‌ها', icon: Icon(Icons.business_outlined)),
@@ -243,8 +243,17 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               bool isSelected = currentDay == _selectedDate;
               bool isToday = currentDay == Jalali.now();
               
-              bool hasIncoming = allChecks.any((c) => c.type == PaymentType.fromCustomer && !c.isCleared && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
-              bool hasOutgoing = allChecks.any((c) => c.type == PaymentType.toSeller && !c.isCleared && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
+              // اصلاح منطق تشخیص وجود چک برای دقت بیشتر
+              bool hasCheck = allChecks.any((c) {
+                if (c.checkDueDate == null) return false;
+                final jCheckDate = Jalali.fromDateTime(c.checkDueDate!);
+                return jCheckDate.year == currentDay.year && 
+                       jCheckDate.month == currentDay.month && 
+                       jCheckDate.day == currentDay.day;
+              });
+              
+              bool hasIncoming = allChecks.any((c) => c.type == PaymentType.fromCustomer && !c.isCleared && c.checkDueDate != null && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
+              bool hasOutgoing = allChecks.any((c) => c.type == PaymentType.toSeller && !c.isCleared && c.checkDueDate != null && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
 
               return GestureDetector(
                 onTap: () => setState(() => _selectedDate = currentDay),
@@ -256,7 +265,16 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text("$day".toPersianDigit(), style: TextStyle(color: isSelected ? Colors.white : (isToday ? Theme.of(context).primaryColor : Colors.black87), fontSize: 14, fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal)),
+                      Text(
+                        "$day".toPersianDigit(), 
+                        style: TextStyle(
+                          color: isSelected 
+                              ? Colors.white 
+                              : (hasCheck ? Colors.amber.shade700 : (isToday ? Theme.of(context).primaryColor : Colors.black87)), 
+                          fontSize: 14, 
+                          fontWeight: isSelected || isToday || hasCheck ? FontWeight.bold : FontWeight.normal
+                        )
+                      ),
                       if (hasIncoming || hasOutgoing)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),

@@ -282,12 +282,24 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   void _showAddDriverDialog() {
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
+    final bankController = TextEditingController();
+    final accountController = TextEditingController();
+    final ownerController = TextEditingController();
+
     _showStyledDialog(
       title: 'راننده جدید',
       children: [
         _buildTextField(controller: nameController, label: 'نام و نام خانوادگی', icon: Icons.person),
         const SizedBox(height: 12),
         _buildTextField(controller: phoneController, label: 'شماره تماس', icon: Icons.phone, keyboardType: TextInputType.phone),
+        const Divider(height: 32),
+        const Text('اطلاعات بانکی پیش‌فرض (اختیاری)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+        const SizedBox(height: 12),
+        _buildTextField(controller: bankController, label: 'نام بانک', icon: Icons.account_balance),
+        const SizedBox(height: 12),
+        _buildTextField(controller: accountController, label: 'شماره حساب/کارت', icon: Icons.credit_card, keyboardType: TextInputType.number),
+        const SizedBox(height: 12),
+        _buildTextField(controller: ownerController, label: 'نام صاحب حساب', icon: Icons.person_outline),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
@@ -300,10 +312,19 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
             firstName: first, 
             lastName: last, 
             phone: phoneController.text,
+            bankName: bankController.text,
+            accountNumber: accountController.text,
+            accountOwner: ownerController.text,
           );
           await _repository.saveDriver(newDriver);
           await _loadInitialData();
-          setState(() => _selectedDriver = _drivers.firstWhere((d) => d.id == newDriver.id));
+          setState(() {
+            _selectedDriver = _drivers.firstWhere((d) => d.id == newDriver.id);
+            // پر کردن خودکار فیلدهای بانکی در فرم اصلی
+            _bankNameController.text = newDriver.bankName ?? "";
+            _accountNumberController.text = newDriver.accountNumber ?? "";
+            _accountOwnerController.text = newDriver.accountOwner ?? "";
+          });
           return true;
         }
         return false;
@@ -483,7 +504,15 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                           icon: Icons.person_outline, 
                           value: _selectedDriver, 
                           items: _drivers, 
-                          onChanged: (v) => _selectedDriver = v, 
+                          onChanged: (v) {
+                            _selectedDriver = v;
+                            if (v != null) {
+                              // پر کردن خودکار فیلدهای بانکی با انتخاب راننده
+                              _bankNameController.text = v.bankName ?? "";
+                              _accountNumberController.text = v.accountNumber ?? "";
+                              _accountOwnerController.text = v.accountOwner ?? "";
+                            }
+                          },
                           itemLabel: (d) => d.fullName,
                           onAddPressed: _showAddDriverDialog,
                         ),
