@@ -9,6 +9,14 @@ class Driver {
   Driver({required this.id, required this.firstName, required this.lastName, required this.phone});
   String get fullName => "$firstName $lastName";
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Driver && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'firstName': firstName,
@@ -31,6 +39,14 @@ class Car {
 
   Car({required this.id, required this.name, this.plate});
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Car && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'name': name,
@@ -41,6 +57,34 @@ class Car {
     id: map['id'],
     name: map['name'],
     plate: map['plate'],
+  );
+}
+
+class LogisticsCo {
+  final String id;
+  final String name;
+  final String phone;
+
+  LogisticsCo({required this.id, required this.name, required this.phone});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LogisticsCo && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'phone': phone,
+  };
+
+  factory LogisticsCo.fromMap(Map<String, dynamic> map) => LogisticsCo(
+    id: map['id'],
+    name: map['name'],
+    phone: map['phone'],
   );
 }
 
@@ -79,7 +123,7 @@ class CarExpense {
 class Maintenance {
   final String id;
   final String carId;
-  final String type; // روغن، گریس‌کاری، فیلتر و ...
+  final String type;
   final DateTime date;
   final double cost;
   final int? currentKm;
@@ -130,6 +174,14 @@ class LoadType {
 
   LoadType({required this.id, required this.name});
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LoadType && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
   Map<String, dynamic> toMap() => {
     'id': id,
     'name': name,
@@ -147,6 +199,14 @@ class Seller {
   final String product;
 
   Seller({required this.id, required this.name, required this.product});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Seller && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -175,6 +235,14 @@ class Customer {
     required this.phone,
     this.village = "", 
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Customer && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 
   String get fullName => village.isNotEmpty ? "$firstName $lastName ($village)" : "$firstName $lastName";
 
@@ -226,7 +294,7 @@ class ServiceExpenses {
   double loadingTip;
   double unloadingTip;
   double disinfectionCost;
-  double commission; // فیلد جدید کمیسیون
+  double commission;
   List<OtherExpense> otherExpenses;
 
   ServiceExpenses({
@@ -354,6 +422,7 @@ class LoadService {
   final LoadType loadType;
   final Seller seller;
   final Customer? customer;
+  final LogisticsCo? logisticsCo;
   final String origin;
   final String destination;
   final DateTime date;
@@ -365,6 +434,15 @@ class LoadService {
   final ServiceExpenses expenses;
   final String? purchaseInvoiceImagePath;
 
+  // فیلدهای جدید اطلاعات حساب جهت واریز کرایه
+  final String? fareAccountNumber;
+  final String? fareAccountOwner;
+  final String? fareBankName;
+
+  // فیلدهای نام و تلفن باربری جهت ثبت مستقیم
+  final String? logisticsName;
+  final String? logisticsPhone;
+
   LoadService({
     required this.id,
     required this.orderCode,
@@ -373,6 +451,7 @@ class LoadService {
     required this.loadType,
     required this.seller,
     this.customer,
+    this.logisticsCo,
     required this.origin,
     required this.destination,
     required this.date,
@@ -383,6 +462,11 @@ class LoadService {
     this.collectionsFromCustomer = const [],
     required this.expenses,
     this.purchaseInvoiceImagePath,
+    this.fareAccountNumber,
+    this.fareAccountOwner,
+    this.fareBankName,
+    this.logisticsName,
+    this.logisticsPhone,
   });
 
   double get totalPurchaseAmount => weight * purchasePricePerTon;
@@ -416,6 +500,7 @@ class LoadService {
       'loadTypeId': loadType.id,
       'sellerId': seller.id,
       'customerId': customer?.id,
+      'logisticsId': logisticsCo?.id,
       'origin': origin,
       'destination': destination,
       'date': date.toIso8601String(),
@@ -424,6 +509,11 @@ class LoadService {
       'purchasePricePerTon': purchasePricePerTon,
       'expenses': jsonEncode(expenses.toMap()),
       'purchaseInvoiceImagePath': purchaseInvoiceImagePath,
+      'fareAccountNumber': fareAccountNumber,
+      'fareAccountOwner': fareAccountOwner,
+      'fareBankName': fareBankName,
+      'logisticsName': logisticsName,
+      'logisticsPhone': logisticsPhone,
     };
   }
 
@@ -434,6 +524,7 @@ class LoadService {
     required LoadType loadType,
     required Seller seller,
     Customer? customer,
+    LogisticsCo? logisticsCo,
     List<Payment> paymentsToSeller = const [],
     List<Payment> collectionsFromCustomer = const [],
   }) {
@@ -445,6 +536,7 @@ class LoadService {
       loadType: loadType,
       seller: seller,
       customer: customer,
+      logisticsCo: logisticsCo,
       origin: map['origin'] ?? '',
       destination: map['destination'] ?? '',
       date: DateTime.parse(map['date']),
@@ -455,6 +547,11 @@ class LoadService {
       collectionsFromCustomer: collectionsFromCustomer,
       expenses: ServiceExpenses.fromMap(jsonDecode(map['expenses'])),
       purchaseInvoiceImagePath: map['purchaseInvoiceImagePath'],
+      fareAccountNumber: map['fareAccountNumber'],
+      fareAccountOwner: map['fareAccountOwner'],
+      fareBankName: map['fareBankName'],
+      logisticsName: map['logisticsName'],
+      logisticsPhone: map['logisticsPhone'],
     );
   }
 }

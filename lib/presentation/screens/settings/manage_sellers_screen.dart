@@ -28,14 +28,14 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
     });
   }
 
-  void _showAddSellerDialog() {
-    final nameController = TextEditingController();
-    final productController = TextEditingController();
+  void _showSellerDialog({Seller? seller}) {
+    final nameController = TextEditingController(text: seller?.name);
+    final productController = TextEditingController(text: seller?.product);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('افزودن فروشنده جدید', style: TextStyle(fontSize: 16)),
+        title: Text(seller == null ? 'افزودن فروشنده جدید' : 'ویرایش فروشنده', style: const TextStyle(fontSize: 16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -49,7 +49,7 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
             onPressed: () async {
               if (nameController.text.isNotEmpty) {
                 final newSeller = Seller(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: seller?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameController.text,
                   product: productController.text,
                 );
@@ -91,26 +91,35 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
                         ),
                         title: Text(seller.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(seller.product),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('تایید حذف'),
-                                content: Text('آیا از حذف "${seller.name}" اطمینان دارید؟'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
-                                ],
-                              ),
-                            );
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              onPressed: () => _showSellerDialog(seller: seller),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('تایید حذف'),
+                                    content: Text('آیا از حذف "${seller.name}" اطمینان دارید؟'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                                    ],
+                                  ),
+                                );
 
-                            if (confirm == true) {
-                              await DatabaseHelper.instance.delete('sellers', seller.id);
-                              _refreshSellers();
-                            }
-                          },
+                                if (confirm == true) {
+                                  await DatabaseHelper.instance.delete('sellers', seller.id);
+                                  _refreshSellers();
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -118,7 +127,7 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddSellerDialog,
+        onPressed: () => _showSellerDialog(),
         backgroundColor: Colors.teal,
         child: const Icon(Icons.add, color: Colors.white),
       ),

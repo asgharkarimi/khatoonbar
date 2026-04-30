@@ -24,23 +24,34 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   List<LoadType> _loadTypes = [];
   List<Seller> _sellers = [];
   List<Customer> _customers = [];
+  List<LogisticsCo> _logisticsCos = [];
 
   Driver? _selectedDriver;
   Car? _selectedCar;
   LoadType? _selectedLoadType;
   Seller? _selectedSeller;
   Customer? _selectedCustomer;
+  LogisticsCo? _selectedLogisticsCo;
 
   final TextEditingController _originController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
   final TextEditingController _orderCodeController = TextEditingController();
-
-  final TextEditingController _tollController = TextEditingController();
-  final TextEditingController _fuelController = TextEditingController();
-  final TextEditingController _loadingTipController = TextEditingController();
-  final TextEditingController _unloadingTipController = TextEditingController();
   
-  double _commission = 0; 
+  // اطلاعات باربری (ثبت مستقیم)
+  final TextEditingController _logisticsNameController = TextEditingController();
+  final TextEditingController _logisticsPhoneController = TextEditingController();
+
+  // اطلاعات حساب بانکی
+  final TextEditingController _accountNumberController = TextEditingController();
+  final TextEditingController _accountOwnerController = TextEditingController();
+  final TextEditingController _bankNameController = TextEditingController();
+
+  double _fuel = 0;
+  double _toll = 0;
+  double _loadingTip = 0;
+  double _unloadingTip = 0;
+  double _billOfLading = 0;
+  
   List<OtherExpense> _otherExpenses = [];
 
   double _weight = 0;
@@ -75,6 +86,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _selectedCar = _cars.any((c) => c.id == s.car.id) ? _cars.firstWhere((c) => c.id == s.car.id) : null;
       _selectedLoadType = _loadTypes.any((lt) => lt.id == s.loadType.id) ? _loadTypes.firstWhere((lt) => lt.id == s.loadType.id) : null;
       _selectedSeller = _sellers.any((sel) => sel.id == s.seller.id) ? _sellers.firstWhere((sel) => sel.id == s.seller.id) : null;
+      _selectedLogisticsCo = _logisticsCos.any((l) => l.id == s.logisticsCo?.id) ? _logisticsCos.firstWhere((l) => l.id == s.logisticsCo!.id) : null;
+
       if (s.customer != null) {
         _selectedCustomer = _customers.any((c) => c.id == s.customer!.id) ? _customers.firstWhere((c) => c.id == s.customer!.id) : null;
       }
@@ -82,16 +95,24 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _originController.text = s.origin;
       _destinationController.text = s.destination;
       _orderCodeController.text = s.orderCode;
+      
+      _logisticsNameController.text = s.logisticsName ?? "";
+      _logisticsPhoneController.text = s.logisticsPhone ?? "";
+
+      _accountNumberController.text = s.fareAccountNumber ?? "";
+      _accountOwnerController.text = s.fareAccountOwner ?? "";
+      _bankNameController.text = s.fareBankName ?? "";
+
       _weight = s.weight;
       _transportPricePerTon = s.transportPricePerTon;
       _purchasePricePerTon = s.purchasePricePerTon;
       _purchaseInvoiceImagePath = s.purchaseInvoiceImagePath;
 
-      _tollController.text = s.expenses.tollCost.toString();
-      _fuelController.text = s.expenses.fuelCost.toString();
-      _loadingTipController.text = s.expenses.loadingTip.toString();
-      _unloadingTipController.text = s.expenses.unloadingTip.toString();
-      _commission = s.expenses.commission;
+      _fuel = s.expenses.fuelCost;
+      _toll = s.expenses.tollCost;
+      _loadingTip = s.expenses.loadingTip;
+      _unloadingTip = s.expenses.unloadingTip;
+      _billOfLading = s.expenses.billOfLadingCost;
       _otherExpenses = List.from(s.expenses.otherExpenses);
     });
   }
@@ -103,6 +124,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       final types = await _repository.getLoadTypes();
       final sellers = await _repository.getSellers();
       final customers = await _repository.getCustomers();
+      final logistics = await _repository.getLogisticsCos();
 
       setState(() {
         _drivers = drivers;
@@ -110,6 +132,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
         _loadTypes = types;
         _sellers = sellers;
         _customers = customers;
+        _logisticsCos = logistics;
         _isLoading = false;
       });
     } catch (e) {
@@ -189,7 +212,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildSourceOption(Icons.camera_alt_outlined, 'دوربین', ImageSource.camera),
-                _buildSourceOption(Icons.photo_library_outlined, 'گالری', ImageSource.gallery),
+                _buildSourceOption(Icons.photo_library_outlined, 'گارلی', ImageSource.gallery),
               ],
             ),
             const SizedBox(height: 10),
@@ -229,7 +252,32 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     }
   }
 
-  // --- متدهای افزودن سریع (Quick Add) ---
+  void _showAddLogisticsCoDialog() {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    _showStyledDialog(
+      title: 'باربری جدید',
+      children: [
+        _buildTextField(controller: nameController, label: 'نام باربری', icon: Icons.business),
+        const SizedBox(height: 12),
+        _buildTextField(controller: phoneController, label: 'شماره تماس', icon: Icons.phone, keyboardType: TextInputType.phone),
+      ],
+      onConfirm: () async {
+        if (nameController.text.isNotEmpty) {
+          final newCo = LogisticsCo(id: DateTime.now().millisecondsSinceEpoch.toString(), name: nameController.text, phone: phoneController.text);
+          await _repository.saveLogisticsCo(newCo);
+          await _loadInitialData();
+          setState(() {
+            _selectedLogisticsCo = _logisticsCos.firstWhere((l) => l.id == newCo.id);
+            _logisticsNameController.text = newCo.name;
+            _logisticsPhoneController.text = newCo.phone;
+          });
+          return true;
+        }
+        return false;
+      },
+    );
+  }
 
   void _showAddDriverDialog() {
     final nameController = TextEditingController();
@@ -271,14 +319,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       children: [
         _buildTextField(controller: nameController, label: 'نام خودرو', icon: Icons.local_shipping),
         const SizedBox(height: 16),
-        const Align(
-          alignment: Alignment.centerRight,
-          child: Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(height: 8),
-        IranianPlateInput(
-          onChanged: (v) => plateValue = v,
-        ),
+        IranianPlateInput(onChanged: (v) => plateValue = v),
       ],
       onConfirm: () async {
         if (nameController.text.isNotEmpty) {
@@ -395,11 +436,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     double totalPurchase = _weight * _purchasePricePerTon;
     
     double otherExpensesSum = _otherExpenses.fold(0, (sum, item) => sum + item.amount);
-    double fixedExpensesSum = (double.tryParse(_tollController.text) ?? 0) +
-                             (double.tryParse(_fuelController.text) ?? 0) +
-                             (double.tryParse(_loadingTipController.text) ?? 0) +
-                             (double.tryParse(_unloadingTipController.text) ?? 0) +
-                             _commission;
+    double fixedExpensesSum = _fuel + _toll + _loadingTip + _unloadingTip + _billOfLading;
     double totalExpenses = fixedExpensesSum + otherExpensesSum;
     double netProfit = totalTransport - totalExpenses;
 
@@ -420,6 +457,27 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       children: [
                         _buildTextField(controller: _orderCodeController, label: 'کد سفارش', icon: Icons.numbers, readOnly: true),
                         const SizedBox(height: 12),
+                        _buildDropdownField<LogisticsCo>(
+                          label: 'انتخاب باربری از لیست', 
+                          icon: Icons.business_outlined, 
+                          value: _selectedLogisticsCo, 
+                          items: _logisticsCos, 
+                          onChanged: (v) {
+                            _selectedLogisticsCo = v;
+                            if (v != null) {
+                              _logisticsNameController.text = v.name;
+                              _logisticsPhoneController.text = v.phone;
+                            }
+                          }, 
+                          itemLabel: (l) => l.name,
+                          onAddPressed: _showAddLogisticsCoDialog,
+                        ),
+                        if (_selectedLogisticsCo == null) ...[
+                          _buildTextField(controller: _logisticsNameController, label: 'نام باربری (ثبت مستقیم)', icon: Icons.business),
+                          const SizedBox(height: 12),
+                          _buildTextField(controller: _logisticsPhoneController, label: 'تلفن باربری', icon: Icons.phone, keyboardType: TextInputType.phone),
+                          const SizedBox(height: 12),
+                        ],
                         _buildDropdownField<Driver>(
                           label: 'انتخاب راننده', 
                           icon: Icons.person_outline, 
@@ -490,7 +548,17 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         AmountInput(label: 'قیمت هر تن حمل', initialValue: _transportPricePerTon, onChanged: (v) => setState(() => _transportPricePerTon = v)),
                         const SizedBox(height: 12),
                         AmountInput(label: 'قیمت هر تن خرید', initialValue: _purchasePricePerTon, onChanged: (v) => setState(() => _purchasePricePerTon = v)),
-                        const SizedBox(height: 16),
+                        
+                        const Divider(height: 32),
+                        const Text('اطلاعات حساب جهت واریز کرایه:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey)),
+                        const SizedBox(height: 12),
+                        _buildTextField(controller: _accountNumberController, label: 'شماره حساب / کارت', icon: Icons.credit_card_outlined, keyboardType: TextInputType.number),
+                        const SizedBox(height: 12),
+                        _buildTextField(controller: _accountOwnerController, label: 'نام صاحب حساب', icon: Icons.person_outline),
+                        const SizedBox(height: 12),
+                        _buildTextField(controller: _bankNameController, label: 'نام بانک', icon: Icons.account_balance_outlined),
+
+                        const SizedBox(height: 24),
                         OutlinedButton.icon(
                           onPressed: _pickPurchaseInvoice,
                           icon: Icon(_purchaseInvoiceImagePath == null ? Icons.attach_file_outlined : Icons.check_circle_outline),
@@ -525,22 +593,18 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       title: 'مخارج و هزینه‌های سرویس',
                       icon: Icons.receipt_long_outlined,
                       children: [
-                        AmountInput(
-                          label: 'هزینه کمیسیون (الزامی)', 
-                          initialValue: _commission, 
-                          onChanged: (v) => setState(() => _commission = v),
-                        ),
+                        AmountInput(label: 'هزینه بارنامه (الزامی)', initialValue: _billOfLading, onChanged: (v) => setState(() => _billOfLading = v)),
                         const SizedBox(height: 12),
                         Row(children: [
-                          Expanded(child: _buildTextField(controller: _fuelController, label: 'سوخت', icon: Icons.local_gas_station_outlined, keyboardType: TextInputType.number)),
-                          const SizedBox(width: 8),
-                          Expanded(child: _buildTextField(controller: _tollController, label: 'عوارض', icon: Icons.confirmation_number_outlined, keyboardType: TextInputType.number)),
+                          Expanded(child: AmountInput(label: 'سوخت', initialValue: _fuel, onChanged: (v) => setState(() => _fuel = v))),
+                          const SizedBox(width: 12),
+                          Expanded(child: AmountInput(label: 'عوارض', initialValue: _toll, onChanged: (v) => setState(() => _toll = v))),
                         ]),
                         const SizedBox(height: 12),
                         Row(children: [
-                          Expanded(child: _buildTextField(controller: _loadingTipController, label: 'انعام بارگیری', icon: Icons.upload_outlined, keyboardType: TextInputType.number)),
-                          const SizedBox(width: 8),
-                          Expanded(child: _buildTextField(controller: _unloadingTipController, label: 'انعام تخلیه', icon: Icons.download_outlined, keyboardType: TextInputType.number)),
+                          Expanded(child: AmountInput(label: 'انعام بارگیری', initialValue: _loadingTip, onChanged: (v) => setState(() => _loadingTip = v))),
+                          const SizedBox(width: 12),
+                          Expanded(child: AmountInput(label: 'انعام تخلیه', initialValue: _unloadingTip, onChanged: (v) => setState(() => _unloadingTip = v))),
                         ]),
                         const Divider(height: 32),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -620,20 +684,11 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller, 
-    required String label, 
-    required IconData icon, 
-    TextInputType keyboardType = TextInputType.text, 
-    bool readOnly = false,
-    String? Function(String?)? validator,
-  }) {
+  Widget _buildTextField({required TextEditingController controller, required String label, required IconData icon, TextInputType keyboardType = TextInputType.text, bool readOnly = false}) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       readOnly: readOnly,
-      validator: validator,
-      onChanged: (v) => setState(() {}),
       decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
     );
   }
@@ -679,9 +734,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   }
 
   Future<void> _saveService() async {
-    if (!_formKey.currentState!.validate() || _commission == 0) {
-      if (_commission == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ کمیسیون را وارد کنید')));
+    if (!_formKey.currentState!.validate() || _billOfLading == 0) {
+      if (_billOfLading == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ بارنامه را وارد کنید')));
       }
       return;
     }
@@ -692,11 +747,12 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     }
 
     final expenses = ServiceExpenses(
-      fuelCost: double.tryParse(_fuelController.text) ?? 0,
-      tollCost: double.tryParse(_tollController.text) ?? 0,
-      loadingTip: double.tryParse(_loadingTipController.text) ?? 0,
-      unloadingTip: double.tryParse(_unloadingTipController.text) ?? 0,
-      commission: _commission,
+      fuelCost: _fuel,
+      tollCost: _toll,
+      loadingTip: _loadingTip,
+      unloadingTip: _unloadingTip,
+      billOfLadingCost: _billOfLading,
+      commission: 0,
       otherExpenses: _otherExpenses,
     );
 
@@ -708,6 +764,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       loadType: _selectedLoadType!,
       seller: _selectedSeller!,
       customer: _selectedCustomer,
+      logisticsCo: _selectedLogisticsCo,
+      logisticsName: _logisticsNameController.text,
+      logisticsPhone: _logisticsPhoneController.text,
       origin: _originController.text,
       destination: _destinationController.text,
       date: widget.serviceToEdit?.date ?? DateTime.now(),
@@ -716,6 +775,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       purchasePricePerTon: _purchasePricePerTon,
       expenses: expenses,
       purchaseInvoiceImagePath: _purchaseInvoiceImagePath,
+      fareAccountNumber: _accountNumberController.text.trim(),
+      fareAccountOwner: _accountOwnerController.text.trim(),
+      fareBankName: _bankNameController.text.trim(),
     );
 
     try {

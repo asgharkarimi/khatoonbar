@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import '../../core/database/database_helper.dart'; 
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
@@ -24,11 +26,17 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   List<Payment> _allPayments = [];
   bool _isLoading = true;
   AccountFilter _currentFilter = AccountFilter.all;
+  
+  Jalali _selectedDate = Jalali.now();
+  Jalali _viewMonth = Jalali.now();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadData();
   }
 
@@ -64,11 +72,39 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     }
   }
 
+  String _getTargetName(Payment p) {
+    if (p.type == PaymentType.fromCustomer) {
+      final c = _customers.firstWhere((c) => c.id == p.customerId, orElse: () => Customer(id: '', firstName: 'نامشخص', lastName: '', phone: ''));
+      return c.fullName;
+    } else {
+      final s = _sellers.firstWhere((s) => s.id == p.sellerId, orElse: () => Seller(id: '', name: 'نامشخص', product: ''));
+      return s.name;
+    }
+  }
+
+  void _showImageDialog(String path) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              child: Image.file(File(path), fit: BoxFit.cover),
+            ),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('بستن')),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-    // محاسبات کلی
     double totalCustomerBilling = _services.fold(0.0, (sum, s) => sum + s.totalServicePriceForCustomer);
     double totalCustomerCollected = _allPayments.where((p) => p.type == PaymentType.fromCustomer && p.isCleared).fold(0.0, (sum, p) => sum + p.amount);
     double totalDriversProfit = _services.fold(0.0, (sum, s) => sum + s.netProfit);
@@ -77,29 +113,41 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       appBar: AppBar(
         title: const Text('گزارشات و دفاتر حساب'),
         actions: [
-          PopupMenuButton<AccountFilter>(
-            icon: const Icon(Icons.filter_list),
-            onSelected: (filter) => setState(() => _currentFilter = filter),
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: AccountFilter.all, child: Text('همه موارد')),
-              const PopupMenuItem(value: AccountFilter.inDebt, child: Text('فقط بدهکاران')),
-              const PopupMenuItem(value: AccountFilter.settled, child: Text('فقط تسویه شده')),
-            ],
-          ),
+          if (_tabController.index != 3)
+            PopupMenuButton<AccountFilter>(
+              icon: const Icon(Icons.filter_list),
+              onSelected: (filter) => setState(() => _currentFilter = filter),
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: AccountFilter.all, child: Text('همه موارد')),
+                const PopupMenuItem(value: AccountFilter.inDebt, child: Text('فقط بدهکاران')),
+                const PopupMenuItem(value: AccountFilter.settled, child: Text('فقط تسویه شده')),
+              ],
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.today_outlined),
+              onPressed: () => setState(() {
+                _selectedDate = Jalali.now();
+                _viewMonth = Jalali.now();
+              }),
+              tooltip: 'امروز',
+            ),
           const SizedBox(width: 8),
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.group_outlined)),
             Tab(text: 'شرکت‌ها', icon: Icon(Icons.business_outlined)),
             Tab(text: 'رانندگان', icon: Icon(Icons.person_pin_outlined)),
+            Tab(text: 'چک‌ها', icon: Icon(Icons.event_note_outlined)),
           ],
         ),
       ),
       body: Column(
         children: [
-          _buildFilterIndicator(),
+          if (_tabController.index != 3) _buildFilterIndicator(),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -107,6 +155,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                 _buildCustomerTab(totalCustomerBilling, totalCustomerCollected),
                 _buildSellerTab(),
                 _buildDriverTab(totalDriversProfit),
+                _buildChecksTab(),
               ],
             ),
           ),
@@ -124,6 +173,242 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       child: Text("وضعیت نمایش: $label", style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold))
     );
   }
+
+  Widget _buildChecksTab() {
+    final allChecks = _allPayments.where((p) => p.method == PaymentMethod.check).toList();
+    final dayChecks = allChecks.where((c) {
+      if (c.checkDueDate == null) return false;
+      final jDate = Jalali.fromDateTime(c.checkDueDate!);
+      return jDate.year == _selectedDate.year && jDate.month == _selectedDate.month && jDate.day == _selectedDate.day;
+    }).toList();
+
+    return Column(
+      children: [
+        _buildCustomCalendar(allChecks),
+        const Divider(height: 1),
+        Expanded(
+          child: Container(
+            color: Colors.grey.shade50,
+            child: Column(
+              children: [
+                _buildDayHeader(dayChecks.length),
+                Expanded(
+                  child: dayChecks.isEmpty
+                      ? _buildEmptyState("در این تاریخ چکی ثبت نشده است")
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: dayChecks.length,
+                          itemBuilder: (context, index) => _buildDetailedCheckItem(dayChecks[index]),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomCalendar(List<Payment> allChecks) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      color: Colors.white,
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(onPressed: () => setState(() => _viewMonth = _viewMonth.addMonths(-1)), icon: const Icon(Icons.chevron_left, color: Colors.blueGrey)),
+              Text("${_viewMonth.formatter.mN} ${_viewMonth.year}".toPersianDigit(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blueGrey)),
+              IconButton(onPressed: () => setState(() => _viewMonth = _viewMonth.addMonths(1)), icon: const Icon(Icons.chevron_right, color: Colors.blueGrey)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map((d) => Text(d, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold))).toList(),
+          ),
+          const SizedBox(height: 8),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 2, crossAxisSpacing: 2),
+            itemCount: _viewMonth.monthLength + _viewMonth.copy(day: 1).weekDay - 1,
+            itemBuilder: (context, index) {
+              int dayOffset = _viewMonth.copy(day: 1).weekDay - 1;
+              if (index < dayOffset) return const SizedBox();
+              
+              int day = index - dayOffset + 1;
+              Jalali currentDay = _viewMonth.copy(day: day);
+              bool isSelected = currentDay == _selectedDate;
+              bool isToday = currentDay == Jalali.now();
+              
+              bool hasIncoming = allChecks.any((c) => c.type == PaymentType.fromCustomer && !c.isCleared && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
+              bool hasOutgoing = allChecks.any((c) => c.type == PaymentType.toSeller && !c.isCleared && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
+
+              return GestureDetector(
+                onTap: () => setState(() => _selectedDate = currentDay),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isSelected ? Theme.of(context).primaryColor : (isToday ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text("$day".toPersianDigit(), style: TextStyle(color: isSelected ? Colors.white : (isToday ? Theme.of(context).primaryColor : Colors.black87), fontSize: 14, fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.normal)),
+                      if (hasIncoming || hasOutgoing)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (hasIncoming) Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+                              if (hasIncoming && hasOutgoing) const SizedBox(width: 2),
+                              if (hasOutgoing) Container(width: 4, height: 4, decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle)),
+                            ],
+                          ),
+                        )
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayHeader(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade200)),
+            child: const Icon(Icons.calendar_month, size: 16, color: Colors.blueGrey),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_selectedDate.formatFullDate(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey)),
+              Text(count > 0 ? "$count چک ثبت شده".toPersianDigit() : "بدون رویداد مالی", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailedCheckItem(Payment p) {
+    final now = DateTime.now();
+    final difference = p.checkDueDate!.difference(now).inDays;
+    
+    // نوار پیشرفت: هرچی نزدیک‌تر می‌شیم کمتر می‌شه (معکوس)
+    double progress = (difference / 15.0).clamp(0.0, 1.0);
+    
+    Color color = Colors.green;
+    if (difference <= 3) color = Colors.red;
+    else if (difference <= 7) color = Colors.orange;
+
+    bool isFromCustomer = p.type == PaymentType.fromCustomer;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 4,
+      shadowColor: Colors.black.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: p.isCleared ? Colors.green.shade100 : Colors.white)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: p.isCleared ? Colors.green.shade50 : color.withOpacity(0.1),
+                  child: Icon(isFromCustomer ? Icons.arrow_downward : Icons.arrow_upward, color: p.isCleared ? Colors.green : color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(AppFormatters.formatCurrency(p.amount) + " تومان", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: p.isCleared ? Colors.blueGrey : color)),
+                      Text(_getTargetName(p), style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                if (p.checkImagePath != null)
+                  IconButton(onPressed: () => _showImageDialog(p.checkImagePath!), icon: const Icon(Icons.image_outlined, color: Colors.blueGrey)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!p.isCleared) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(difference <= 0 ? "⚠️ امروز سررسید است" : "$difference روز تا سررسید".toPersianDigit(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+                  Text("${(progress * 100).toInt()}% مانده".toPersianDigit(), style: TextStyle(fontSize: 10, color: color)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: color.withOpacity(0.1),
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                  minHeight: 10,
+                ),
+              ),
+            ] else 
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green, size: 16),
+                    SizedBox(width: 8),
+                    Text("این چک وصول شده است", style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _checkInfoTag(Icons.account_balance, p.bankName ?? '---'),
+                const SizedBox(width: 8),
+                _checkInfoTag(Icons.tag, p.checkNumber ?? '---'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _checkInfoTag(IconData icon, String text) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade100)),
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: Colors.blueGrey),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text.toPersianDigit(), style: const TextStyle(fontSize: 10, color: Colors.black54, overflow: TextOverflow.ellipsis))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- تب‌های قدیمی (مشتریان، شرکت‌ها، رانندگان) ---
 
   Widget _buildCustomerTab(double billing, double collected) {
     final filtered = _customers.where((c) {

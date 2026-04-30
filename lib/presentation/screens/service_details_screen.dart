@@ -98,10 +98,12 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
       padding: const EdgeInsets.all(16),
       children: [
         _buildExpenseSection('هزینه‌های ثابت سرویس', [
+          _buildInfoRow('هزینه بارنامه', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
           _buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
           _buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
           _buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
           _buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
+          _buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"),
         ]),
         const SizedBox(height: 16),
         Row(
@@ -172,26 +174,35 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
             _buildInfoRow('نوع بار', _currentService.loadType.name),
             _buildInfoRow('وزن', "${_currentService.weight.toString().toPersianDigit()} تن"),
             _buildInfoRow('مسیر', "${_currentService.origin} به ${_currentService.destination}"),
+            if (_currentService.logisticsCo != null)
+              _buildInfoRow('باربری', _currentService.logisticsCo!.name),
           ]),
           const SizedBox(height: 16),
-          _buildInfoSection('مالی و خرید', [
+          _buildInfoSection('مالی و اطلاعات واریز', [
             _buildInfoRow('مجموع کرایه حمل', "${AppFormatters.formatCurrency(_currentService.totalTransportAmount)} تومان"),
             if (_currentService.purchasePricePerTon > 0) ...[
               _buildInfoRow('قیمت هر تن خرید', "${AppFormatters.formatCurrency(_currentService.purchasePricePerTon)} تومان"),
               _buildInfoRow('جمع کل خرید', "${AppFormatters.formatCurrency(_currentService.totalPurchaseAmount)} تومان"),
-              if (_currentService.purchaseInvoiceImagePath != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showImageDialog(_currentService.purchaseInvoiceImagePath!, 'فاکتور خرید'),
-                    icon: const Icon(Icons.receipt_outlined),
-                    label: const Text('مشاهده فاکتور خرید'),
-                    style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
-                  ),
-                ),
             ],
             const Divider(),
+            if (_currentService.fareAccountNumber != null && _currentService.fareAccountNumber!.isNotEmpty) ...[
+              const Text('اطلاعات حساب واریز کرایه:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+              _buildInfoRow('شماره حساب/کارت', _currentService.fareAccountNumber!.toPersianDigit()),
+              _buildInfoRow('صاحب حساب', _currentService.fareAccountOwner ?? "---"),
+              _buildInfoRow('بانک', _currentService.fareBankName ?? "---"),
+              const Divider(),
+            ],
             _buildInfoRow('سود خالص سرویس', "${AppFormatters.formatCurrency(_currentService.netProfit)} تومان", isBold: true, color: Colors.green),
+            if (_currentService.purchaseInvoiceImagePath != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () => _showImageDialog(_currentService.purchaseInvoiceImagePath!, 'فاکتور خرید'),
+                  icon: const Icon(Icons.receipt_outlined),
+                  label: const Text('مشاهده فاکتور خرید'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+                ),
+              ),
           ]),
         ],
       ),

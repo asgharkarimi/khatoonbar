@@ -5,6 +5,7 @@ import 'settings/manage_sellers_screen.dart';
 import 'settings/manage_load_types_screen.dart';
 import 'settings/manage_customers_screen.dart';
 import 'settings/manage_car_expenses_screen.dart';
+import 'settings/manage_logistics_cos_screen.dart';
 import 'maintenance_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -65,6 +66,14 @@ class SettingsScreen extends StatelessWidget {
             'لیست گیرندگان بار (مشتریان)',
             Icons.people_outline,
             const ManageCustomersScreen(),
+          ),
+          _buildSettingItem(
+            context,
+            'مدیریت باربری‌ها',
+            'افزودن و ویرایش لیست باربری‌ها',
+            Icons.business,
+            const ManageLogisticsCosScreen(),
+            highlightColor: Colors.blue,
           ),
           _buildSettingItem(
             context,

@@ -29,29 +29,32 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
     });
   }
 
-  void _showAddCarDialog() {
-    final nameController = TextEditingController();
-    String plateValue = "";
+  void _showCarDialog({Car? car}) {
+    final nameController = TextEditingController(text: car?.name);
+    String plateValue = car?.plate ?? "";
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('افزودن ماشین جدید', style: TextStyle(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: nameController, 
-              decoration: const InputDecoration(labelText: 'نام ماشین (مثلاً فوتون)'),
-            ),
-            const SizedBox(height: 16),
-            const Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            IranianPlateInput(
-              onChanged: (v) => plateValue = v,
-            ),
-          ],
+        title: Text(car == null ? 'افزودن ماشین جدید' : 'ویرایش ماشین', style: const TextStyle(fontSize: 16)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: nameController, 
+                decoration: const InputDecoration(labelText: 'نام ماشین (مثلاً فوتون)'),
+              ),
+              const SizedBox(height: 16),
+              const Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              IranianPlateInput(
+                initialValue: plateValue,
+                onChanged: (v) => plateValue = v,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
@@ -59,7 +62,7 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
             onPressed: () async {
               if (nameController.text.isNotEmpty) {
                 final newCar = Car(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: car?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameController.text,
                   plate: plateValue,
                 );
@@ -106,26 +109,35 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                                 child: Text("پلاک: ${car.plate}"),
                               )
                             : null,
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('تایید حذف'),
-                                content: Text('آیا از حذف "${car.name}" اطمینان دارید؟'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
-                                ],
-                              ),
-                            );
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              onPressed: () => _showCarDialog(car: car),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('تایید حذف'),
+                                    content: Text('آیا از حذف "${car.name}" اطمینان دارید؟'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                                    ],
+                                  ),
+                                );
 
-                            if (confirm == true) {
-                              await DatabaseHelper.instance.delete('cars', car.id);
-                              _refreshCars();
-                            }
-                          },
+                                if (confirm == true) {
+                                  await DatabaseHelper.instance.delete('cars', car.id);
+                                  _refreshCars();
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -133,7 +145,7 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddCarDialog,
+        onPressed: () => _showCarDialog(),
         backgroundColor: Colors.orange,
         child: const Icon(Icons.add, color: Colors.white),
       ),

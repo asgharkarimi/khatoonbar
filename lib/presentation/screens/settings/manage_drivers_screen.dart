@@ -29,15 +29,15 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
     });
   }
 
-  void _showAddDriverDialog() {
-    final firstNameController = TextEditingController();
-    final lastNameController = TextEditingController();
-    final phoneController = TextEditingController();
+  void _showDriverDialog({Driver? driver}) {
+    final firstNameController = TextEditingController(text: driver?.firstName);
+    final lastNameController = TextEditingController(text: driver?.lastName);
+    final phoneController = TextEditingController(text: driver?.phone);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('افزودن راننده جدید', style: TextStyle(fontSize: 16)),
+        title: Text(driver == null ? 'افزودن راننده جدید' : 'ویرایش راننده', style: const TextStyle(fontSize: 16)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -56,7 +56,7 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
             onPressed: () async {
               if (firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty) {
                 final newDriver = Driver(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: driver?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                   firstName: firstNameController.text,
                   lastName: lastNameController.text,
                   phone: phoneController.text,
@@ -99,26 +99,35 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
                         ),
                         title: Text(driver.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(driver.phone),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('تایید حذف'),
-                                content: Text('آیا از حذف "${driver.fullName}" اطمینان دارید؟'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
-                                ],
-                              ),
-                            );
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              onPressed: () => _showDriverDialog(driver: driver),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('تایید حذف'),
+                                    content: Text('آیا از حذف "${driver.fullName}" اطمینان دارید؟'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                                    ],
+                                  ),
+                                );
 
-                            if (confirm == true) {
-                              await DatabaseHelper.instance.delete('drivers', driver.id);
-                              _refreshDrivers();
-                            }
-                          },
+                                if (confirm == true) {
+                                  await DatabaseHelper.instance.delete('drivers', driver.id);
+                                  _refreshDrivers();
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -126,7 +135,7 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddDriverDialog,
+        onPressed: () => _showDriverDialog(),
         backgroundColor: Colors.green,
         child: const Icon(Icons.add, color: Colors.white),
       ),

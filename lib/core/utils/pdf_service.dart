@@ -10,7 +10,7 @@ import 'persian_text_shaper.dart';
 class PdfService {
   static const PdfColor primaryColor = PdfColors.blueGrey800;
   static const PdfColor accentColor = PdfColors.blueGrey50;
-  static const PdfColor secondaryColor = PdfColors.blue800; // رنگ جدید برای بخش‌های درخواستی
+  static const PdfColor secondaryColor = PdfColors.blue800;
 
   static String _fix(String? text) {
     if (text == null || text.isEmpty) return "";
@@ -18,7 +18,6 @@ class PdfService {
   }
 
   static Future<pw.Font> _getFont({bool isBold = false}) async {
-    // اگر فایل bold دارید نام آن را اینجا اصلاح کنید
     final fontPath = isBold ? "assets/fonts/iranyekan.ttf" : "assets/fonts/iranyekan.ttf";
     final fontData = await rootBundle.load(fontPath);
     return pw.Font.ttf(fontData);
@@ -65,6 +64,8 @@ class PdfService {
               _rowInfo("مشتری:", service.customer?.fullName ?? "---"),
               _rowInfo("راننده:", service.driver.fullName),
               _rowInfo("خودرو:", service.car.name),
+              if (service.logisticsCo != null)
+                _rowInfo("باربری:", service.logisticsCo!.name),
               
               pw.SizedBox(height: 10),
               _buildSectionTitle("جزئیات بار"),
@@ -77,7 +78,16 @@ class PdfService {
               if (!isTransportOnly)
                 _rowInfo("فی خرید:", "${AppFormatters.formatCurrency(service.purchasePricePerTon)} تومان"),
               _rowInfo("فی حمل:", "${AppFormatters.formatCurrency(service.transportPricePerTon)} تومان"),
+              if (service.expenses.billOfLadingCost > 0)
+                _rowInfo("هزینه بارنامه:", "${AppFormatters.formatCurrency(service.expenses.billOfLadingCost)} تومان"),
               
+              // اطلاعات بانکی در PDF
+              if (service.fareAccountNumber != null && service.fareAccountNumber!.isNotEmpty) ...[
+                pw.SizedBox(height: 5),
+                _rowInfo("واریز به:", "${service.fareAccountOwner ?? ''} (${service.fareBankName ?? ''})"),
+                _rowInfo("شماره حساب:", service.fareAccountNumber!.toPersianDigit()),
+              ],
+
               pw.Spacer(),
               pw.Container(
                 padding: const pw.EdgeInsets.all(10),
@@ -267,7 +277,7 @@ class PdfService {
           ),
           pw.SizedBox(width: 10),
           pw.SizedBox(
-            width: 60,
+            width: 75,
             child: pw.Text(_fix(label), style: const pw.TextStyle(fontSize: 9, color: secondaryColor)),
           ),
         ],

@@ -33,10 +33,34 @@ class _IranianPlateInputState extends State<IranianPlateInput> {
   @override
   void initState() {
     super.initState();
-    _part1Controller = TextEditingController();
-    _letterController = TextEditingController(text: 'ب');
-    _part2Controller = TextEditingController();
-    _part3Controller = TextEditingController();
+    
+    String p1 = "";
+    String letter = "ب";
+    String p2 = "";
+    String p3 = "";
+
+    if (widget.initialValue != null && widget.initialValue!.length >= 8) {
+      // Assuming a simple format for now based on how it's concatenated in _update
+      // format: 2digits + letter + 3digits + 2digits
+      // This is a bit brittle if letter length varies, but usually it's 1 char or "الف"
+      // Let's try to parse it more intelligently or just handle common cases.
+      String val = widget.initialValue!;
+      p1 = val.substring(0, 2);
+      
+      // Find where the letter ends. It starts at index 2.
+      // After the letter, there should be 5 digits (3+2) at the end.
+      int letterEnd = val.length - 5;
+      if (letterEnd > 2) {
+        letter = val.substring(2, letterEnd);
+        p2 = val.substring(letterEnd, letterEnd + 3);
+        p3 = val.substring(letterEnd + 3);
+      }
+    }
+
+    _part1Controller = TextEditingController(text: p1);
+    _letterController = TextEditingController(text: letter);
+    _part2Controller = TextEditingController(text: p2);
+    _part3Controller = TextEditingController(text: p3);
   }
 
   void _update() {
@@ -173,7 +197,7 @@ class _IranianPlateInputState extends State<IranianPlateInput> {
       textAlign: TextAlign.center,
       maxLength: maxLength,
       style: style,
-      showCursor: false, // حذف اون خط سبز (مکان‌نما) که شبیه حاشیه شده بود
+      showCursor: false,
       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       decoration: const InputDecoration(
         counterText: '',

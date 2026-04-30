@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import '../../core/data/service_repository.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
@@ -158,13 +159,14 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                         title: const Text('تاریخ سررسید چک'),
                         trailing: Text(_checkDueDate == null ? 'انتخاب نشده' : _checkDueDate!.toPersianDate()),
                         onTap: () async {
-                          final picked = await showDatePicker(
+                          final picked = await showPersianDatePicker(
                             context: context,
-                            initialDate: DateTime.now().add(const Duration(days: 30)),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                            locale: const Locale('fa', 'IR'),
+                            initialDate: Jalali.now(), // اصلاح شد: نمایش تاریخ امروز به جای ۳۰ روز بعد
+                            firstDate: Jalali(1400),
+                            lastDate: Jalali(1450),
                           );
-                          if (picked != null) setState(() => _checkDueDate = picked);
+                          if (picked != null) setState(() => _checkDueDate = picked.toDateTime());
                         },
                       ),
                     ],

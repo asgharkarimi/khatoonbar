@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'core/theme/app_theme.dart';
 import 'core/database/database_helper.dart';
+import 'core/utils/notification_service.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/reports_screen.dart';
 import 'presentation/screens/settings_screen.dart';
@@ -10,6 +12,9 @@ import 'presentation/screens/ledger_hub_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // مقداردهی اولیه سرویس اعلان‌ها
+  await NotificationService.init();
   
   await Hive.initFlutter();
   
@@ -22,8 +27,13 @@ void main() async {
   await Hive.openBox('payments');
   await Hive.openBox('car_expenses');
   await Hive.openBox('maintenances');
+  await Hive.openBox('logistics_cos'); 
+  await Hive.openBox('settings');
 
   await DatabaseHelper.instance.seedDefaultData();
+
+  // بررسی چک‌های سررسید امروز هنگام ورود به برنامه
+  NotificationService.checkDueChecks();
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Scaffold(
@@ -56,8 +66,13 @@ class KhatoonBarApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       locale: const Locale('fa', 'IR'),
-      supportedLocales: const [Locale('fa', 'IR')],
+      supportedLocales: const [
+        Locale('fa', 'IR'),
+      ],
       localizationsDelegates: const [
+        // ترتیب اینجا خیلی حیاتیه! فارسی‌ها باید اول باشن تا میلادی گوگل اولویت پیدا نکنه
+        PersianMaterialLocalizations.delegate,
+        PersianCupertinoLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

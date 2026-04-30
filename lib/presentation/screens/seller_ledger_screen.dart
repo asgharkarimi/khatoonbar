@@ -260,33 +260,85 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
 
   Widget _buildPaymentTile(Payment p) {
     bool isPendingCheck = p.method == PaymentMethod.check && !p.isCleared;
+    int daysLeft = 0;
+    double progress = 0;
+    Color progressBarColor = Colors.green;
+
+    if (isPendingCheck && p.checkDueDate != null) {
+      daysLeft = p.checkDueDate!.difference(DateTime.now()).inDays;
+      progress = 1.0 - (daysLeft / 15.0).clamp(0.0, 1.0);
+      
+      if (daysLeft <= 3) {
+        progressBarColor = Colors.red;
+      } else if (daysLeft <= 7) {
+        progressBarColor = Colors.orange;
+      }
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: isPendingCheck ? Colors.orange.shade50 : Colors.white,
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: isPendingCheck ? Colors.orange.shade100 : Colors.green.shade100,
-          child: Icon(
-            p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, 
-            color: isPendingCheck ? Colors.orange : Colors.green
-          ),
-        ),
-        title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      color: isPendingCheck ? Colors.orange.shade50.withOpacity(0.5) : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isPendingCheck ? progressBarColor.withOpacity(0.3) : Colors.grey.shade100),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
           children: [
-            Text("${p.date.toPersianDate()} ${p.description ?? ''}"),
-            if (p.method == PaymentMethod.check)
-              Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.green.shade100,
+                child: Icon(
+                  p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, 
+                  color: isPendingCheck ? progressBarColor : Colors.green
+                ),
+              ),
+              title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("${p.date.toPersianDate()} ${p.description ?? ''}"),
+                  if (p.method == PaymentMethod.check)
+                    Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              trailing: isPendingCheck 
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: progressBarColor, borderRadius: BorderRadius.circular(12)),
+                        child: Text(
+                          daysLeft <= 0 ? "امروز" : "$daysLeft روز مانده", 
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+                        ),
+                      ),
+                    ],
+                  )
+                : const Icon(Icons.check_circle, color: Colors.green, size: 24),
+            ),
+            if (isPendingCheck)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
+                        minHeight: 6,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
-        trailing: isPendingCheck 
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(12)),
-              child: const Text("وصول نشده", style: TextStyle(color: Colors.white, fontSize: 10)),
-            )
-          : const Icon(Icons.check_circle, color: Colors.green, size: 20),
       ),
     );
   }

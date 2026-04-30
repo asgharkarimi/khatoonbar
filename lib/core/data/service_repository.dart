@@ -70,12 +70,14 @@ class ServiceRepository {
   Future<List<Seller>> getSellers() async => await _dbHelper.getAllSellers();
   Future<List<Customer>> getCustomers() async => await _dbHelper.getAllCustomers();
   Future<List<LoadType>> getLoadTypes() async => await _dbHelper.getAllLoadTypes();
+  Future<List<LogisticsCo>> getLogisticsCos() async => await _dbHelper.getAllLogisticsCos(); // متد جدید
 
   Future<void> saveDriver(Driver driver) async => await _dbHelper.insertDriver(driver);
   Future<void> saveCar(Car car) async => await _dbHelper.insertCar(car);
   Future<void> saveCustomer(Customer customer) async => await _dbHelper.insertCustomer(customer);
   Future<void> saveSeller(Seller seller) async => await _dbHelper.insertSeller(seller);
   Future<void> saveLoadType(LoadType type) async => await _dbHelper.insertLoadType(type);
+  Future<void> saveLogisticsCo(LogisticsCo co) async => await _dbHelper.insertLogisticsCo(co); // متد جدید
 
   Future<void> saveMaintenance(Maintenance m) async => await _dbHelper.insertMaintenance(m);
   Future<List<Maintenance>> getMaintenances() async => await _dbHelper.getAllMaintenances();
@@ -88,9 +90,8 @@ class ServiceRepository {
   Future<List<Payment>> getPayments() async => await _dbHelper.getAllPayments();
   Future<void> deletePayment(String id) async => await _dbHelper.delete('payments', id);
 
-  // --- محاسبات دقیق مالی (Userflow Fix) ---
+  // --- محاسبات دقیق مالی ---
 
-  // سود ناخالص سرویس‌ها (بدون کسر هزینه‌های کلی ماشین)
   Future<double> getTotalServiceProfitInRange(DateTime start, DateTime end) async {
     final services = await getAllServices();
     return services
@@ -98,7 +99,6 @@ class ServiceRepository {
         .fold<double>(0.0, (sum, s) => sum + s.netProfit);
   }
 
-  // سود واقعی (سود سرویس‌ها منهای تعمیرات و هزینه‌های کلی ماشین)
   Future<double> getRealNetProfitInRange(DateTime start, DateTime end) async {
     final serviceProfit = await getTotalServiceProfitInRange(start, end);
     
@@ -116,7 +116,6 @@ class ServiceRepository {
     return serviceProfit - totalMaintenance - totalCarExpenses;
   }
 
-  // محاسبه بدهی کل مشتریان (با در نظر گرفتن پرداخت‌های کلی)
   Future<double> getTotalUnpaidCustomerDebts() async {
     final services = await getAllServices();
     final allPayments = await getPayments();
@@ -129,7 +128,6 @@ class ServiceRepository {
     return totalServiceAmount - totalCollected;
   }
 
-  // محاسبه بدهی کل به فروشندگان (با در نظر گرفتن پرداخت‌های کلی)
   Future<double> getTotalUnpaidSellerDebts() async {
     final services = await getAllServices();
     final allPayments = await getPayments();
@@ -142,30 +140,22 @@ class ServiceRepository {
     return totalPurchaseAmount - totalPaid;
   }
 
-  // محاسبه نقدینگی فعلی (بر اساس دریافتی‌ها منهای پرداختی‌ها و مخارج)
   Future<double> getCurrentCashBalance() async {
     final allPayments = await getPayments();
     final maintenanceList = await getMaintenances();
     final carExpensesList = await _dbHelper.getAllCarExpenses();
     final services = await getAllServices();
 
-    // ۱. تمام پول‌هایی که از مشتریان گرفته‌ایم (نقد شده)
     double cashIn = allPayments
         .where((p) => p.type == PaymentType.fromCustomer && p.isCleared)
         .fold(0.0, (sum, p) => sum + p.amount);
 
-    // ۲. تمام پول‌هایی که به فروشندگان داده‌ایم (نقد شده)
     double cashOutToSellers = allPayments
         .where((p) => p.type == PaymentType.toSeller && p.isCleared)
         .fold(0.0, (sum, p) => sum + p.amount);
 
-    // ۳. هزینه‌های مستقیم سرویس‌ها (سوخت و ...)
     double serviceExpenses = services.fold(0.0, (sum, s) => sum + s.expenses.total);
-
-    // ۴. هزینه‌های تعمیرات و نگهداری
     double maintenanceCosts = maintenanceList.fold(0.0, (sum, m) => sum + m.cost);
-    
-    // ۵. هزینه‌های متفرقه ماشین
     double carExpenses = carExpensesList.fold(0.0, (sum, e) => sum + e.amount);
 
     return cashIn - cashOutToSellers - serviceExpenses - maintenanceCosts - carExpenses;

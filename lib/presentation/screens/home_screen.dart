@@ -36,17 +36,15 @@ class _HomeScreenState extends State<HomeScreen> {
       final services = await _repository.getAllServices();
       final allPayments = await _repository.getPayments();
       
-      // فیلتر کردن چک‌های پاس نشده که سررسیدشان نزدیک است (مثلاً تا ۱۰ روز آینده)
       final now = DateTime.now();
       final upcoming = allPayments.where((p) {
         if (p.method == PaymentMethod.check && !p.isCleared && p.checkDueDate != null) {
           final difference = p.checkDueDate!.difference(now).inDays;
-          return difference <= 10; // چک‌های ۱۰ روز آینده
+          return difference <= 15; // چک‌های ۱۵ روز آینده برای نمایش نوار پیشرفت
         }
         return false;
       }).toList();
 
-      // مرتب‌سازی بر اساس تاریخ سررسید
       upcoming.sort((a, b) => a.checkDueDate!.compareTo(b.checkDueDate!));
 
       setState(() {
@@ -77,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
         } else if (_activeFilter == HomeServiceFilter.month) {
           return service.date.year == now.year && service.date.month == now.month;
         }
-        return true; // All
+        return true; 
       }).toList();
     });
   }
@@ -243,32 +241,48 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         Row(
           children: [
-            const Icon(Icons.notification_important_outlined, color: Colors.orange, size: 20),
+            const Icon(Icons.timer_outlined, color: Colors.blueGrey, size: 20),
             const SizedBox(width: 8),
             Text(
-              'چک‌های سررسید نزدیک',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+              'وضعیت چک‌های پرداختی و دریافتی',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
           ],
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 130,
+          height: 160,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _upcomingChecks.length,
             itemBuilder: (context, index) {
               final check = _upcomingChecks[index];
-              final daysLeft = check.checkDueDate!.difference(DateTime.now()).inDays;
+              final now = DateTime.now();
+              final difference = check.checkDueDate!.difference(now).inDays;
               
+              // محاسبات نوار پیشرفت (فرض بر این است که از ۱۵ روز قبل نوار شروع به پر شدن می‌کند)
+              double progress = 1.0 - (difference / 15.0).clamp(0.0, 1.0);
+              
+              Color progressBarColor = Colors.green;
+              if (difference <= 3) {
+                progressBarColor = Colors.red;
+              } else if (difference <= 7) {
+                progressBarColor = Colors.orange;
+              }
+
+              String typeLabel = check.type == PaymentType.toSeller ? "پرداختی به فروشنده" : "دریافتی از مشتری";
+
               return Container(
-                width: 240,
+                width: 260,
                 margin: const EdgeInsets.only(left: 12),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,44 +291,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          AppFormatters.formatCurrency(check.amount),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                        Expanded(
+                          child: Text(
+                            AppFormatters.formatCurrency(check.amount),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: progressBarColor, fontSize: 16),
+                          ),
                         ),
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: () => _confirmClearance(check),
-                              icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              tooltip: 'تأیید وصول',
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: daysLeft <= 1 ? Colors.red : Colors.orange,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                daysLeft <= 0 ? "امروز" : "$daysLeft روز مانده",
-                                style: const TextStyle(color: Colors.white, fontSize: 10),
-                              ),
-                            ),
-                          ],
+                        IconButton(
+                          onPressed: () => _confirmClearance(check),
+                          icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 24),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ],
                     ),
                     Text(
-                      check.description ?? "بدون توضیح",
+                      "$typeLabel - ${check.description ?? "بدون توضیح"}",
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                     ),
-                    Text(
-                      "سررسید: ${check.checkDueDate!.toPersianDate()}",
-                      style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+                    const SizedBox(height: 8),
+                    // نوار پیشرفت افقی
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey.shade100,
+                        valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
+                        minHeight: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "سررسید: ${check.checkDueDate!.toPersianDate()}",
+                          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          difference <= 0 ? "امروز" : "$difference روز مانده",
+                          style: TextStyle(
+                            color: progressBarColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

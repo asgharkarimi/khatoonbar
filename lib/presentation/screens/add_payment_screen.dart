@@ -245,11 +245,12 @@ class _AddPaymentScreenState extends State<AddPaymentScreen> {
                   value: _checkDueDate,
                   hint: 'انتخاب تاریخ سررسید',
                   onTap: () async {
+                    // تغییر initialDate به Jalali.now() برای نمایش تاریخ امروز به صورت پیش‌فرض
                     Jalali? picked = await showPersianDatePicker(
                       context: context,
-                      initialDate: Jalali.fromDateTime(DateTime.now().add(const Duration(days: 30))),
-                      firstDate: Jalali.fromDateTime(DateTime.now()),
-                      lastDate: Jalali.fromDateTime(DateTime.now().add(const Duration(days: 365 * 2))),
+                      initialDate: Jalali.now(),
+                      firstDate: Jalali(1400, 1, 1),
+                      lastDate: Jalali(1450, 12, 29),
                     );
                     if (picked != null) setState(() => _checkDueDate = picked.toDateTime());
                   },

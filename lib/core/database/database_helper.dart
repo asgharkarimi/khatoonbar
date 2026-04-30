@@ -80,6 +80,13 @@ class DatabaseHelper {
     return res.map((m) => Car.fromMap(m)).toList();
   }
 
+  // Logistics Companies (New)
+  Future<void> insertLogisticsCo(LogisticsCo co) async => await insert('logistics_cos', co.toMap());
+  Future<List<LogisticsCo>> getAllLogisticsCos() async {
+    final res = await queryAll('logistics_cos');
+    return res.map((m) => LogisticsCo.fromMap(m)).toList();
+  }
+
   // Customers
   Future<void> insertCustomer(Customer customer) async => await insert('customers', customer.toMap());
   Future<List<Customer>> getAllCustomers() async {
@@ -131,6 +138,7 @@ class DatabaseHelper {
     final sellersJson = await queryAll('sellers');
     final loadTypesJson = await queryAll('load_types');
     final customersJson = await queryAll('customers');
+    final logisticsJson = await queryAll('logistics_cos');
 
     List<LoadService> services = [];
     for (var s in servicesJson) {
@@ -152,6 +160,11 @@ class DatabaseHelper {
           ? customersJson.firstWhere((cust) => cust['id'] == customerId, orElse: () => <String, dynamic>{})
           : <String, dynamic>{};
 
+      final logisticsId = s['logisticsId'];
+      final Map<String, dynamic> logisticsMap = (logisticsId != null && logisticsId.toString().isNotEmpty)
+          ? logisticsJson.firstWhere((l) => l['id'] == logisticsId, orElse: () => <String, dynamic>{})
+          : <String, dynamic>{};
+
       if (carMap.isNotEmpty && driverMap.isNotEmpty) {
         services.add(LoadService.fromMap(
           s,
@@ -160,6 +173,7 @@ class DatabaseHelper {
           loadType: typeMap.isNotEmpty ? LoadType.fromMap(typeMap) : LoadType(id: '1', name: 'نامشخص'),
           seller: sellerMap.isNotEmpty ? Seller.fromMap(sellerMap) : Seller(id: '1', name: 'نامشخص', product: ''),
           customer: customerMap.isNotEmpty ? Customer.fromMap(customerMap) : null,
+          logisticsCo: logisticsMap.isNotEmpty ? LogisticsCo.fromMap(logisticsMap) : null,
           paymentsToSeller: servicePayments.where((p) => p.type == PaymentType.toSeller).toList(),
           collectionsFromCustomer: servicePayments.where((p) => p.type == PaymentType.fromCustomer).toList(),
         ));
