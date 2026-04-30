@@ -129,11 +129,13 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/images/khatoon_logo.png',
-              height: 32,
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20), // اعمال مارجین ۲۰
+              child: Image.asset(
+                'assets/images/khatoon_logo.png',
+                height: 32,
+              ),
             ),
-            const SizedBox(width: 8),
             const Text('خاتون بار'),
           ],
         ),

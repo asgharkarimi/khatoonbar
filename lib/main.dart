@@ -8,52 +8,49 @@ import 'core/utils/notification_service.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/reports_screen.dart';
 import 'presentation/screens/settings_screen.dart';
-import 'presentation/screens/ledger_hub_screen.dart';
 
 void main() async {
+  // ۱. شروع سریع رابط کاربری
   WidgetsFlutterBinding.ensureInitialized();
   
-  // مقداردهی اولیه سرویس اعلان‌ها
-  await NotificationService.init();
-  
-  await Hive.initFlutter();
-  
-  await Hive.openBox('drivers');
-  await Hive.openBox('customers');
-  await Hive.openBox('cars');
-  await Hive.openBox('sellers');
-  await Hive.openBox('load_types');
-  await Hive.openBox('load_services');
-  await Hive.openBox('payments');
-  await Hive.openBox('car_expenses');
-  await Hive.openBox('maintenances');
-  await Hive.openBox('logistics_cos'); 
-  await Hive.openBox('settings');
+  try {
+    // ۲. مقداردهی اولیه Hive
+    await Hive.initFlutter();
+    
+    // ۳. باز کردن باکس‌ها به صورت موازی برای سرعت بیشتر
+    await Future.wait([
+      Hive.openBox('drivers'),
+      Hive.openBox('customers'),
+      Hive.openBox('cars'),
+      Hive.openBox('sellers'),
+      Hive.openBox('load_types'),
+      Hive.openBox('load_services'),
+      Hive.openBox('payments'),
+      Hive.openBox('car_expenses'),
+      Hive.openBox('maintenances'),
+      Hive.openBox('logistics_cos'), 
+      Hive.openBox('settings'),
+    ]);
 
-  await DatabaseHelper.instance.seedDefaultData();
+    // ۴. دیتای اولیه
+    await DatabaseHelper.instance.seedDefaultData();
+    
+  } catch (e) {
+    debugPrint("خطا در راه‌اندازی دیتابیس: $e");
+  }
 
-  // بررسی چک‌های سررسید امروز هنگام ورود به برنامه
-  NotificationService.checkDueChecks();
-
-  ErrorWidget.builder = (FlutterErrorDetails details) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            child: Text(
-              "خطایی رخ داده است:\n${details.exception}",
-              textAlign: TextAlign.center,
-              textDirection: TextDirection.rtl,
-              style: const TextStyle(color: Colors.red, fontSize: 14),
-            ),
-          ),
-        ),
-      ),
-    );
-  };
-
+  // ۵. اجرای اپلیکیشن (حتی اگر دیتابیس با خطا مواجه شد)
   runApp(const KhatoonBarApp());
+
+  // ۶. کارهای غیرضروری را بعد از لود شدن کامل انجام می‌دهیم (جلوگیری از صفحه سفید)
+  Future.microtask(() async {
+    try {
+      await NotificationService.init();
+      await NotificationService.checkDueChecks();
+    } catch (e) {
+      debugPrint("خطا در سرویس اعلان: $e");
+    }
+  });
 }
 
 class KhatoonBarApp extends StatelessWidget {
@@ -70,7 +67,6 @@ class KhatoonBarApp extends StatelessWidget {
         Locale('fa', 'IR'),
       ],
       localizationsDelegates: const [
-        // ترتیب اینجا خیلی حیاتیه! فارسی‌ها باید اول باشن تا میلادی گوگل اولویت پیدا نکنه
         PersianMaterialLocalizations.delegate,
         PersianCupertinoLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -90,12 +86,11 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1; // تب خانه (وسط)
 
   final List<Widget> _screens = [
-    const HomeScreen(),
-    const LedgerHubScreen(),
     const ReportsScreen(),
+    const HomeScreen(),
     const SettingsScreen(),
   ];
 
@@ -114,9 +109,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             });
           },
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
-            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'حساب‌ها'),
             BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'گزارشات'),
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
             BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'تنظیمات'),
           ],
         ),
