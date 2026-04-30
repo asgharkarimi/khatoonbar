@@ -130,10 +130,19 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20), // اعمال مارجین ۲۰
-              child: Image.asset(
-                'assets/images/khatoon_logo.png',
-                height: 32,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              // با استفاده از ClipRect و Align، لبه‌های تصویر را کمی برش می‌دهیم تا نقاط سیاه حذف شوند
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.center,
+                  widthFactor: 0.85, // برش ۱۰ درصد از عرض
+                  heightFactor: 0.85, // برش ۱۰ درصد از ارتفاع
+                  child: Image.asset(
+                    'assets/images/khatoon_logo.png',
+                    height: 36,
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
             ),
             const Text('خاتون بار'),

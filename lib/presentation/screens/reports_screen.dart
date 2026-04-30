@@ -136,7 +136,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false, // تغییر یافت برای پر کردن تمام عرض صفحه به طور مساوی
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.group_outlined)),
             Tab(text: 'شرکت‌ها', icon: Icon(Icons.business_outlined)),
