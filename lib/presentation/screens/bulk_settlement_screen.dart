@@ -15,6 +15,7 @@ class BulkSettlementScreen extends StatefulWidget {
 
 class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   final ServiceRepository _repository = ServiceRepository();
+  final _formKey = GlobalKey<FormState>();
   bool _isLoading = true;
 
   List<Seller> _sellers = [];
@@ -70,127 +71,133 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionTitle('۱. انتخاب فروشنده'),
-                  DropdownButtonFormField<Seller>(
-                    value: _selectedSeller,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.store),
-                    ),
-                    items: _sellers.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
-                    onChanged: (val) {
-                      setState(() => _selectedSeller = val);
-                      if (val != null) _loadUnsettledServices(val.id);
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  if (_selectedSeller != null) ...[
-                    _buildSectionTitle('۲. انتخاب سرویس‌های مورد نظر'),
-                    if (_unsettledServices.isEmpty)
-                      const Text('هیچ سرویس تسویه نشده‌ای برای این فروشنده یافت نشد.')
-                    else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _unsettledServices.length,
-                        itemBuilder: (context, index) {
-                          final service = _unsettledServices[index];
-                          final isSelected = _selectedServiceIds.contains(service.id);
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(color: isSelected ? theme.primaryColor : Colors.transparent, width: 2),
-                            ),
-                            child: CheckboxListTile(
-                              value: isSelected,
-                              title: Text("${service.loadType.name} - ${service.orderCode}"),
-                              subtitle: Text("مانده بدهی: ${AppFormatters.formatCurrency(service.remainingDebtToSeller)} تومان"),
-                              onChanged: (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    _selectedServiceIds.add(service.id);
-                                  } else {
-                                    _selectedServiceIds.remove(service.id);
-                                  }
-                                });
-                              },
-                            ),
-                          );
-                        },
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionTitle('۱. انتخاب فروشنده'),
+                    DropdownButtonFormField<Seller>(
+                      value: _selectedSeller,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        prefixIcon: const Icon(Icons.store),
                       ),
+                      validator: (v) => v == null ? 'لطفاً فروشنده را انتخاب کنید' : null,
+                      items: _sellers.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
+                      onChanged: (val) {
+                        setState(() => _selectedSeller = val);
+                        if (val != null) _loadUnsettledServices(val.id);
+                      },
+                    ),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('۳. اطلاعات پرداخت'),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        "جمع بدهی انتخاب شده: ${AppFormatters.formatCurrency(_totalSelectedDebt)} تومان",
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    AmountInput(
-                      label: 'مبلغ پرداختی (کل چک یا فیش)',
-                      onChanged: (val) => setState(() => _paymentAmount = val),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<PaymentMethod>(
-                      value: _selectedMethod,
-                      decoration: const InputDecoration(labelText: 'روش پرداخت'),
-                      items: PaymentMethod.values.map((m) {
-                        String label = "نقد";
-                        if (m == PaymentMethod.check) label = "چک";
-                        if (m == PaymentMethod.card) label = "کارت به کارت";
-                        if (m == PaymentMethod.sheba) label = "شبا";
-                        return DropdownMenuItem(value: m, child: Text(label));
-                      }).toList(),
-                      onChanged: (val) => setState(() => _selectedMethod = val!),
-                    ),
-                    if (_selectedMethod == PaymentMethod.check) ...[
-                      const SizedBox(height: 16),
-                      ListTile(
-                        title: const Text('تاریخ سررسید چک'),
-                        trailing: Text(_checkDueDate == null ? 'انتخاب نشده' : _checkDueDate!.toPersianDate()),
-                        onTap: () async {
-                          final picked = await showPersianDatePicker(
-                            context: context,
-                            locale: const Locale('fa', 'IR'),
-                            initialDate: Jalali.now(), // اصلاح شد: نمایش تاریخ امروز به جای ۳۰ روز بعد
-                            firstDate: Jalali(1400),
-                            lastDate: Jalali(1450),
-                          );
-                          if (picked != null) setState(() => _checkDueDate = picked.toDateTime());
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _descriptionController,
-                      decoration: const InputDecoration(labelText: 'توضیحات (مثلاً شماره چک یا پیگیری)'),
-                    ),
-                    const SizedBox(height: 32),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _selectedServiceIds.isEmpty || _paymentAmount <= 0 ? null : _saveBulkPayment,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.primaryColor,
-                          foregroundColor: Colors.white,
+                    if (_selectedSeller != null) ...[
+                      _buildSectionTitle('۲. انتخاب سرویس‌های مورد نظر'),
+                      if (_unsettledServices.isEmpty)
+                        const Text('هیچ سرویس تسویه نشده‌ای برای این فروشنده یافت نشد.')
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _unsettledServices.length,
+                          itemBuilder: (context, index) {
+                            final service = _unsettledServices[index];
+                            final isSelected = _selectedServiceIds.contains(service.id);
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: isSelected ? theme.primaryColor : Colors.transparent, width: 2),
+                              ),
+                              child: CheckboxListTile(
+                                value: isSelected,
+                                title: Text("${service.loadType.name} - ${service.orderCode}"),
+                                subtitle: Text("مانده بدهی: ${AppFormatters.formatCurrency(service.remainingDebtToSeller)} تومان"),
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedServiceIds.add(service.id);
+                                    } else {
+                                      _selectedServiceIds.remove(service.id);
+                                    }
+                                  });
+                                },
+                              ),
+                            );
+                          },
                         ),
-                        child: const Text('ثبت تسویه گروهی'),
+                      const SizedBox(height: 24),
+                      _buildSectionTitle('۳. اطلاعات پرداخت'),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          "جمع بدهی انتخاب شده: ${AppFormatters.formatCurrency(_totalSelectedDebt)} تومان",
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 40),
+                      const SizedBox(height: 16),
+                      AmountInput(
+                        label: 'مبلغ پرداختی (کل چک یا فیش)',
+                        onChanged: (val) => setState(() => _paymentAmount = val),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<PaymentMethod>(
+                        value: _selectedMethod,
+                        decoration: const InputDecoration(labelText: 'روش پرداخت', border: OutlineInputBorder()),
+                        items: const [
+                          DropdownMenuItem(value: PaymentMethod.cash, child: Text('نقدی')),
+                          DropdownMenuItem(value: PaymentMethod.card, child: Text('کارت به کارت')),
+                          DropdownMenuItem(value: PaymentMethod.check, child: Text('چک')),
+                          DropdownMenuItem(value: PaymentMethod.sheba, child: Text('شبا')),
+                        ],
+                        onChanged: (val) => setState(() => _selectedMethod = val!),
+                      ),
+                      if (_selectedMethod == PaymentMethod.check) ...[
+                        const SizedBox(height: 16),
+                        ListTile(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                          title: const Text('تاریخ سررسید چک'),
+                          subtitle: Text(_checkDueDate == null ? 'برای انتخاب کلیک کنید' : _checkDueDate!.toPersianDate()),
+                          trailing: const Icon(Icons.calendar_month),
+                          onTap: () async {
+                            final picked = await showPersianDatePicker(
+                              context: context,
+                              locale: const Locale('fa', 'IR'),
+                              initialDate: Jalali.now(),
+                              firstDate: Jalali(1400),
+                              lastDate: Jalali(1450),
+                            );
+                            if (picked != null) setState(() => _checkDueDate = picked.toDateTime());
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _descriptionController,
+                        validator: (v) => (v == null || v.isEmpty) ? 'لطفاً توضیحات را وارد کنید' : null,
+                        decoration: const InputDecoration(labelText: 'توضیحات (مثلاً شماره چک یا پیگیری)', border: OutlineInputBorder()),
+                      ),
+                      const SizedBox(height: 32),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: _saveBulkPayment,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('ثبت نهایی تسویه گروهی'),
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
     );
@@ -204,10 +211,25 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   }
 
   Future<void> _saveBulkPayment() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedServiceIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً حداقل یک سرویس را انتخاب کنید')));
+      return;
+    }
+
+    if (_paymentAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ پرداختی را وارد کنید')));
+      return;
+    }
+
+    if (_selectedMethod == PaymentMethod.check && _checkDueDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً تاریخ سررسید چک را انتخاب کنید')));
+      return;
+    }
+
     try {
       double remainingToDistribute = _paymentAmount;
-      
-      // مرتب‌سازی سرویس‌ها برای پرداخت (مثلاً از قدیمی‌ترین بدهی)
       final servicesToPay = _unsettledServices
           .where((s) => _selectedServiceIds.contains(s.id))
           .toList();
@@ -227,7 +249,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
           date: _selectedDate,
           description: "${_descriptionController.text} (تسویه گروهی)",
           checkDueDate: _checkDueDate,
-          isCleared: _selectedMethod != PaymentMethod.check, // چک‌ها در ابتدا پاس نشده فرض می‌شوند
+          isCleared: _selectedMethod != PaymentMethod.check,
         );
 
         await _repository.savePayment(payment, serviceId: service.id);

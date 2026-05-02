@@ -74,7 +74,6 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   }
 
   void _exportToPdf() async {
-    bool success = false;
     String title = "";
     List<String> headers = [];
     List<List<String>> data = [];
@@ -94,8 +93,8 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ]);
       }
     } else if (_tabController.index == 1) {
-      title = "گزارش وضعیت حساب با شرکت‌ها";
-      headers = ["ردیف", "نام شرکت", "وضعیت حساب"];
+      title = "گزارش وضعیت حساب با فروشندگان";
+      headers = ["ردیف", "نام فروشنده", "وضعیت حساب"];
       int i = 1;
       for (var s in _sellers) {
         final sellerServices = _services.where((sel) => sel.seller.id == s.id).toList();
@@ -142,7 +141,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
       return;
     }
 
-    success = await PdfService.generateAndPrintGeneralReport(title, headers, data);
+    bool success = await PdfService.generateAndPrintGeneralReport(title, headers, data);
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("خطا در تولید فایل PDF. لطفا دسترسی‌ها و حافظه را چک کنید.")));
     }
@@ -181,8 +180,13 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
+    // محاسبات کلی
     double totalCustomerBilling = _services.fold(0.0, (sum, s) => sum + s.totalServicePriceForCustomer);
     double totalCustomerCollected = _allPayments.where((p) => p.type == PaymentType.fromCustomer && p.isCleared).fold(0.0, (sum, p) => sum + p.amount);
+    
+    double totalSellerBilling = _services.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
+    double totalSellerPaid = _allPayments.where((p) => p.type == PaymentType.toSeller && p.isCleared).fold(0.0, (sum, p) => sum + p.amount);
+    
     double totalDriversProfit = _services.fold(0.0, (sum, s) => sum + s.netProfit);
 
     return Scaffold(
@@ -220,7 +224,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
           isScrollable: false,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.group_outlined)),
-            Tab(text: 'شرکت‌ها', icon: Icon(Icons.business_outlined)),
+            Tab(text: 'فروشندگان', icon: Icon(Icons.business_outlined)),
             Tab(text: 'رانندگان', icon: Icon(Icons.person_pin_outlined)),
             Tab(text: 'چک‌ها', icon: Icon(Icons.event_note_outlined)),
           ],
@@ -234,7 +238,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               controller: _tabController,
               children: [
                 _buildCustomerTab(totalCustomerBilling, totalCustomerCollected),
-                _buildSellerTab(),
+                _buildSellerTab(totalSellerBilling, totalSellerPaid),
                 _buildDriverTab(totalDriversProfit),
                 _buildChecksTab(),
               ],
@@ -324,13 +328,10 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               bool isSelected = currentDay == _selectedDate;
               bool isToday = currentDay == Jalali.now();
               
-              // اصلاح منطق تشخیص وجود چک برای دقت بیشتر
               bool hasCheck = allChecks.any((c) {
                 if (c.checkDueDate == null) return false;
                 final jCheckDate = Jalali.fromDateTime(c.checkDueDate!);
-                return jCheckDate.year == currentDay.year && 
-                       jCheckDate.month == currentDay.month && 
-                       jCheckDate.day == currentDay.day;
+                return jCheckDate.year == currentDay.year && jCheckDate.month == currentDay.month && jCheckDate.day == currentDay.day;
               });
               
               bool hasIncoming = allChecks.any((c) => c.type == PaymentType.fromCustomer && !c.isCleared && c.checkDueDate != null && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
@@ -349,9 +350,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                       Text(
                         "$day".toPersianDigit(), 
                         style: TextStyle(
-                          color: isSelected 
-                              ? Colors.white 
-                              : (hasCheck ? Colors.amber.shade700 : (isToday ? Theme.of(context).primaryColor : Colors.black87)), 
+                          color: isSelected ? Colors.white : (hasCheck ? Colors.amber.shade700 : (isToday ? Theme.of(context).primaryColor : Colors.black87)), 
                           fontSize: 14, 
                           fontWeight: isSelected || isToday || hasCheck ? FontWeight.bold : FontWeight.normal
                         )
@@ -405,10 +404,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   Widget _buildDetailedCheckItem(Payment p) {
     final now = DateTime.now();
     final difference = p.checkDueDate!.difference(now).inDays;
-    
-    // نوار پیشرفت: هرچی نزدیک‌تر می‌شیم کمتر می‌شه (معکوس)
     double progress = (difference / 15.0).clamp(0.0, 1.0);
-    
     Color color = Colors.green;
     if (difference <= 3) color = Colors.red;
     else if (difference <= 7) color = Colors.orange;
@@ -507,8 +503,6 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  // --- تب‌های قدیمی (مشتریان، شرکت‌ها، رانندگان) ---
-
   Widget _buildCustomerTab(double billing, double collected) {
     final filtered = _customers.where((c) {
       final debt = _services.where((s) => s.customer?.id == c.id).fold<double>(0.0, (sum, s) => sum + s.remainingCustomerDebt);
@@ -558,76 +552,98 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildSellerTab() {
+  Widget _buildSellerTab(double billing, double paid) {
     final filtered = _sellers.where((s) {
-      final debt = _services.where((sel) => sel.seller.id == s.id).fold<double>(0.0, (sum, sel) => sum + sel.remainingDebtToSeller);
-      if (_currentFilter == AccountFilter.inDebt) return debt > 0;
-      if (_currentFilter == AccountFilter.settled) return debt <= 0 && _services.any((sel) => sel.seller.id == s.id);
+      final sellerServices = _services.where((sel) => sel.seller.id == s.id).toList();
+      double sellerBilling = sellerServices.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
+      double sellerPaid = _allPayments
+          .where((p) => (p.sellerId == s.id || sellerServices.any((ser) => ser.id == p.serviceId)) && p.isCleared && p.type == PaymentType.toSeller)
+          .fold(0.0, (sum, p) => sum + p.amount);
+      double balance = sellerBilling - sellerPaid;
+
+      if (_currentFilter == AccountFilter.inDebt) return balance > 0;
+      if (_currentFilter == AccountFilter.settled) return balance <= 0 && sellerServices.isNotEmpty;
       return true;
     }).toList();
 
-    return Expanded(
-      child: filtered.isEmpty
-        ? _buildEmptyState("شرکتی یافت نشد")
-        : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: filtered.length,
-            itemBuilder: (context, index) {
-              final seller = filtered[index];
-              final sellerServices = _services.where((s) => s.seller.id == seller.id).toList();
-              
-              double sellerBilling = sellerServices.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
-              double sellerPaid = _allPayments
-                  .where((p) => (p.sellerId == seller.id || sellerServices.any((s) => s.id == p.serviceId)) && p.isCleared && p.type == PaymentType.toSeller)
-                  .fold(0.0, (sum, p) => sum + p.amount);
-              
-              double balance = sellerBilling - sellerPaid;
+    return Column(
+      children: [
+        _buildMultiSummaryHeader(
+          label: 'وضعیت کلی بدهی به فروشندگان',
+          mainAmount: billing - paid,
+          mainLabel: 'مانده بدهی نهایی',
+          topAmount: billing,
+          topLabel: 'کل مبلغ خرید (فاکتور)',
+          bottomAmount: paid,
+          bottomLabel: 'کل مبلغ پرداختی',
+          color: Colors.red.shade800,
+          bgColor: Colors.red.shade50,
+          icon: Icons.business_outlined,
+        ),
+        Expanded(
+          child: filtered.isEmpty
+            ? _buildEmptyState("فروشنده‌ای یافت نشد")
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: filtered.length,
+                itemBuilder: (context, index) {
+                  final seller = filtered[index];
+                  final sellerServices = _services.where((s) => s.seller.id == seller.id).toList();
+                  
+                  double sellerBilling = sellerServices.fold(0.0, (sum, s) => sum + s.totalPurchaseAmount);
+                  double sellerPaid = _allPayments
+                      .where((p) => (p.sellerId == seller.id || sellerServices.any((s) => s.id == p.serviceId)) && p.isCleared && p.type == PaymentType.toSeller)
+                      .fold(0.0, (sum, p) => sum + p.amount);
+                  
+                  double balance = sellerBilling - sellerPaid;
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                elevation: 0.5,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade100)),
-                child: ExpansionTile(
-                  leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.business, color: Colors.red, size: 20)),
-                  title: Text(seller.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: Text(
-                    balance > 0 ? "بدهی: ${AppFormatters.formatCurrency(balance)} تومان" : (balance < 0 ? "بستانکار: ${AppFormatters.formatCurrency(balance.abs())} تومان" : "تسویه شده"),
-                    style: TextStyle(fontSize: 10, color: balance > 0 ? Colors.red.shade900 : (balance < 0 ? Colors.green.shade700 : Colors.blue.shade700)),
-                  ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          _buildDetailRow("کل مبلغ فاکتور شده (خرید)", sellerBilling, Colors.black87),
-                          _buildDetailRow("کل مبلغ وصول شده (پرداخت)", sellerPaid, Colors.green.shade700),
-                          const Divider(),
-                          _buildDetailRow(
-                            balance >= 0 ? "مانده بدهی نهایی" : "مانده بستانکاری نهایی", 
-                            balance.abs(), 
-                            balance >= 0 ? Colors.red.shade900 : Colors.green.shade900,
-                            isBold: true
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                await Navigator.push(context, MaterialPageRoute(builder: (context) => SellerLedgerScreen(seller: seller)));
-                                _loadData();
-                              },
-                              icon: const Icon(Icons.list_alt, size: 16),
-                              label: const Text("مشاهده دفتر حساب و ثبت چک", style: TextStyle(fontSize: 12)),
-                            ),
-                          ),
-                        ],
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 0.5,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade100)),
+                    child: ExpansionTile(
+                      leading: CircleAvatar(backgroundColor: Colors.red.shade50, child: const Icon(Icons.business, color: Colors.red, size: 20)),
+                      title: Text(seller.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      subtitle: Text(
+                        balance > 0 ? "بدهی: ${AppFormatters.formatCurrency(balance)} تومان" : (balance < 0 ? "بستانکار: ${AppFormatters.formatCurrency(balance.abs())} تومان" : "تسویه شده"),
+                        style: TextStyle(fontSize: 10, color: balance > 0 ? Colors.red.shade900 : (balance < 0 ? Colors.green.shade700 : Colors.blue.shade700)),
                       ),
-                    )
-                  ],
-                ),
-              );
-            },
-          ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              _buildDetailRow("کل مبلغ فاکتور شده (خرید)", sellerBilling, Colors.black87),
+                              _buildDetailRow("کل مبلغ وصول شده (پرداخت)", sellerPaid, Colors.green.shade700),
+                              const Divider(),
+                              _buildDetailRow(
+                                balance >= 0 ? "مانده بدهی نهایی" : "مانده بستانکاری نهایی", 
+                                balance.abs(), 
+                                balance >= 0 ? Colors.red.shade900 : Colors.green.shade900,
+                                isBold: true
+                              ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: () async {
+                                    await Navigator.push(context, MaterialPageRoute(builder: (context) => SellerLedgerScreen(seller: seller)));
+                                    _loadData();
+                                  },
+                                  icon: const Icon(Icons.list_alt, size: 16),
+                                  label: const Text("مشاهده دفتر حساب و ثبت چک", style: TextStyle(fontSize: 12)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  );
+                },
+              ),
+        ),
+      ],
     );
   }
 

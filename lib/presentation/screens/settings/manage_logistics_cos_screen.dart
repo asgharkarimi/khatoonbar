@@ -13,6 +13,7 @@ class ManageLogisticsCosScreen extends StatefulWidget {
 class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
   List<LogisticsCo> _logisticsCos = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -32,34 +33,51 @@ class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
   void _showLogisticsCoDialog({LogisticsCo? co}) {
     final nameController = TextEditingController(text: co?.name);
     final phoneController = TextEditingController(text: co?.phone);
+    final bankController = TextEditingController(text: co?.bankName);
+    final accountController = TextEditingController(text: co?.accountNumber);
+    final ownerController = TextEditingController(text: co?.accountOwner);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(co == null ? 'افزودن باربری جدید' : 'ویرایش باربری', style: const TextStyle(fontSize: 16)),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'نام باربری'),
-                textDirection: TextDirection.rtl,
-              ),
-              const SizedBox(height: 16),
-              PhoneInput(controller: phoneController, label: 'شماره تماس باربری'),
-            ],
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController,
+                  decoration: const InputDecoration(labelText: 'نام باربری (اجباری)', border: OutlineInputBorder()),
+                  validator: (v) => (v == null || v.isEmpty) ? 'نام باربری را وارد کنید' : null,
+                ),
+                const SizedBox(height: 12),
+                PhoneInput(controller: phoneController, label: 'شماره تماس باربری'),
+                const Divider(height: 32),
+                const Text('اطلاعات بانکی (اختیاری)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                const SizedBox(height: 12),
+                TextFormField(controller: bankController, decoration: const InputDecoration(labelText: 'نام بانک', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: accountController, decoration: const InputDecoration(labelText: 'شماره حساب/کارت', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: ownerController, decoration: const InputDecoration(labelText: 'نام صاحب حساب', border: OutlineInputBorder())),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (_formKey.currentState!.validate()) {
                 final newCo = LogisticsCo(
                   id: co?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text,
-                  phone: phoneController.text,
+                  name: nameController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  bankName: bankController.text.trim(),
+                  accountNumber: accountController.text.trim(),
+                  accountOwner: ownerController.text.trim(),
                 );
                 await DatabaseHelper.instance.insertLogisticsCo(newCo);
                 if (mounted) Navigator.pop(context);
@@ -69,6 +87,7 @@ class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
             child: const Text('ذخیره'),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -134,10 +153,11 @@ class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
                   },
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showLogisticsCoDialog(),
         backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('افزودن باربری جدید', style: TextStyle(color: Colors.white)),
       ),
     );
   }

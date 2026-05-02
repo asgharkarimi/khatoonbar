@@ -66,6 +66,13 @@ class DatabaseHelper {
 
   // --- Specialized Methods ---
 
+  // Bank Accounts
+  Future<void> insertBankAccount(BankAccount account) async => await insert('bank_accounts', account.toMap());
+  Future<List<BankAccount>> getAllBankAccounts() async {
+    final res = await queryAll('bank_accounts');
+    return res.map((m) => BankAccount.fromMap(m)).toList();
+  }
+
   // Drivers
   Future<void> insertDriver(Driver driver) async => await insert('drivers', driver.toMap());
   Future<List<Driver>> getAllDrivers() async {

@@ -1,11 +1,50 @@
 import 'dart:convert';
 
+class BankAccount {
+  final String id;
+  final String bankName;
+  final String accountNumber;
+  final String accountOwner;
+  final String? cardNumber;
+  final String? sheba;
+  final double initialBalance;
+
+  BankAccount({
+    required this.id,
+    required this.bankName,
+    required this.accountNumber,
+    required this.accountOwner,
+    this.cardNumber,
+    this.sheba,
+    this.initialBalance = 0,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountOwner': accountOwner,
+    'cardNumber': cardNumber,
+    'sheba': sheba,
+    'initialBalance': initialBalance,
+  };
+
+  factory BankAccount.fromMap(Map<String, dynamic> map) => BankAccount(
+    id: map['id'],
+    bankName: map['bankName'],
+    accountNumber: map['accountNumber'],
+    accountOwner: map['accountOwner'],
+    cardNumber: map['cardNumber'],
+    sheba: map['sheba'],
+    initialBalance: (map['initialBalance'] as num? ?? 0).toDouble(),
+  );
+}
+
 class Driver {
   final String id;
   final String firstName;
   final String lastName;
   final String phone;
-  // فیلدهای جدید اطلاعات بانکی
   final String? bankName;
   final String? accountNumber;
   final String? accountOwner;
@@ -83,8 +122,18 @@ class LogisticsCo {
   final String id;
   final String name;
   final String phone;
+  final String? bankName;
+  final String? accountNumber;
+  final String? accountOwner;
 
-  LogisticsCo({required this.id, required this.name, required this.phone});
+  LogisticsCo({
+    required this.id, 
+    required this.name, 
+    required this.phone,
+    this.bankName,
+    this.accountNumber,
+    this.accountOwner,
+  });
 
   @override
   bool operator ==(Object other) =>
@@ -98,12 +147,18 @@ class LogisticsCo {
     'id': id,
     'name': name,
     'phone': phone,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountOwner': accountOwner,
   };
 
   factory LogisticsCo.fromMap(Map<String, dynamic> map) => LogisticsCo(
     id: map['id'],
     name: map['name'],
     phone: map['phone'],
+    bankName: map['bankName'],
+    accountNumber: map['accountNumber'],
+    accountOwner: map['accountOwner'],
   );
 }
 
@@ -216,8 +271,18 @@ class Seller {
   final String id;
   final String name;
   final String product;
+  final String? bankName;
+  final String? accountNumber;
+  final String? accountOwner;
 
-  Seller({required this.id, required this.name, required this.product});
+  Seller({
+    required this.id, 
+    required this.name, 
+    required this.product,
+    this.bankName,
+    this.accountNumber,
+    this.accountOwner,
+  });
 
   @override
   bool operator ==(Object other) =>
@@ -231,12 +296,18 @@ class Seller {
     'id': id,
     'name': name,
     'product': product,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountOwner': accountOwner,
   };
 
   factory Seller.fromMap(Map<String, dynamic> map) => Seller(
     id: map['id'],
     name: map['name'],
     product: map['product'],
+    bankName: map['bankName'],
+    accountNumber: map['accountNumber'],
+    accountOwner: map['accountOwner'],
   );
 }
 
@@ -246,6 +317,9 @@ class Customer {
   final String lastName;
   final String phone;
   final String village;
+  final String? bankName;
+  final String? accountNumber;
+  final String? accountOwner;
 
   Customer({
     required this.id, 
@@ -253,6 +327,9 @@ class Customer {
     required this.lastName, 
     required this.phone,
     this.village = "", 
+    this.bankName,
+    this.accountNumber,
+    this.accountOwner,
   });
 
   @override
@@ -271,6 +348,9 @@ class Customer {
     'lastName': lastName,
     'phone': phone,
     'village': village,
+    'bankName': bankName,
+    'accountNumber': accountNumber,
+    'accountOwner': accountOwner,
   };
 
   factory Customer.fromMap(Map<String, dynamic> map) => Customer(
@@ -279,6 +359,9 @@ class Customer {
     lastName: map['lastName'],
     phone: map['phone'],
     village: map['village'] ?? "",
+    bankName: map['bankName'],
+    accountNumber: map['accountNumber'],
+    accountOwner: map['accountOwner'],
   );
 }
 
@@ -366,6 +449,7 @@ class Payment {
   final String? serviceId;
   final String? sellerId;
   final String? customerId;
+  final String? myAccountId; // فیلد جدید: اتصال به حساب بانکی شخصی من
   final PaymentType type;
   final PaymentMethod method;
   final double amount;
@@ -383,6 +467,7 @@ class Payment {
     this.serviceId,
     this.sellerId,
     this.customerId,
+    this.myAccountId,
     required this.type,
     required this.method,
     required this.amount,
@@ -401,6 +486,7 @@ class Payment {
     'serviceId': serviceId,
     'sellerId': sellerId,
     'customerId': customerId,
+    'myAccountId': myAccountId,
     'type': type.index,
     'method': method.index,
     'amount': amount,
@@ -419,6 +505,7 @@ class Payment {
     serviceId: map['serviceId'],
     sellerId: map['sellerId'],
     customerId: map['customerId'],
+    myAccountId: map['myAccountId'],
     type: PaymentType.values[map['type']],
     method: PaymentMethod.values[map['method']],
     amount: (map['amount'] as num).toDouble(),
@@ -453,12 +540,10 @@ class LoadService {
   final ServiceExpenses expenses;
   final String? purchaseInvoiceImagePath;
 
-  // فیلدهای جدید اطلاعات حساب جهت واریز کرایه
   final String? fareAccountNumber;
   final String? fareAccountOwner;
   final String? fareBankName;
 
-  // فیلدهای نام و تلفن باربری جهت ثبت مستقیم
   final String? logisticsName;
   final String? logisticsPhone;
 

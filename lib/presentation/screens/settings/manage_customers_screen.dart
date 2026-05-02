@@ -14,6 +14,7 @@ class ManageCustomersScreen extends StatefulWidget {
 class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
   List<Customer> _customers = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -35,36 +36,61 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
     final lastNameController = TextEditingController(text: customer?.lastName);
     final phoneController = TextEditingController(text: customer?.phone);
     final villageController = TextEditingController(text: customer?.village);
+    final bankController = TextEditingController(text: customer?.bankName);
+    final accountController = TextEditingController(text: customer?.accountNumber);
+    final ownerController = TextEditingController(text: customer?.accountOwner);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(customer == null ? 'افزودن مشتری (گیرنده) جدید' : 'ویرایش مشتری', style: const TextStyle(fontSize: 16)),
+        title: Text(customer == null ? 'افزودن مشتری جدید' : 'ویرایش مشتری', style: const TextStyle(fontSize: 16)),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: firstNameController, decoration: const InputDecoration(labelText: 'نام')),
-              const SizedBox(height: 8),
-              TextField(controller: lastNameController, decoration: const InputDecoration(labelText: 'نام خانوادگی')),
-              const SizedBox(height: 8),
-              TextField(controller: villageController, decoration: const InputDecoration(labelText: 'روستا/شهر')),
-              const SizedBox(height: 16),
-              PhoneInput(controller: phoneController, label: 'شماره تلفن'),
-            ],
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: firstNameController, 
+                  decoration: const InputDecoration(labelText: 'نام (اجباری)', border: OutlineInputBorder()),
+                  validator: (v) => (v == null || v.isEmpty) ? 'نام را وارد کنید' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: lastNameController, 
+                  decoration: const InputDecoration(labelText: 'نام خانوادگی (اجباری)', border: OutlineInputBorder()),
+                  validator: (v) => (v == null || v.isEmpty) ? 'نام خانوادگی را وارد کنید' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(controller: villageController, decoration: const InputDecoration(labelText: 'روستا/شهر', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                PhoneInput(controller: phoneController, label: 'شماره تلفن'),
+                const Divider(height: 32),
+                const Text('اطلاعات بانکی (اختیاری)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                const SizedBox(height: 12),
+                TextFormField(controller: bankController, decoration: const InputDecoration(labelText: 'نام بانک', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: accountController, decoration: const InputDecoration(labelText: 'شماره حساب/کارت', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: ownerController, decoration: const InputDecoration(labelText: 'نام صاحب حساب', border: OutlineInputBorder())),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           ElevatedButton(
             onPressed: () async {
-              if (firstNameController.text.isNotEmpty && lastNameController.text.isNotEmpty) {
+              if (_formKey.currentState!.validate()) {
                 final newCustomer = Customer(
                   id: customer?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                  firstName: firstNameController.text,
-                  lastName: lastNameController.text,
-                  phone: phoneController.text,
-                  village: villageController.text,
+                  firstName: firstNameController.text.trim(),
+                  lastName: lastNameController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  village: villageController.text.trim(),
+                  bankName: bankController.text.trim(),
+                  accountNumber: accountController.text.trim(),
+                  accountOwner: ownerController.text.trim(),
                 );
                 await DatabaseHelper.instance.insertCustomer(newCustomer);
                 if (mounted) Navigator.pop(context);
@@ -74,6 +100,7 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
             child: const Text('ذخیره'),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -107,9 +134,7 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) => CustomerLedgerScreen(customer: customer),
-                            ),
+                            MaterialPageRoute(builder: (context) => CustomerLedgerScreen(customer: customer)),
                           );
                         },
                         trailing: Row(
@@ -133,7 +158,6 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
                                     ],
                                   ),
                                 );
-
                                 if (confirm == true) {
                                   await DatabaseHelper.instance.delete('customers', customer.id);
                                   _refreshCustomers();
@@ -147,10 +171,11 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
                   },
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCustomerDialog(),
         backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('افزودن مشتری جدید', style: TextStyle(color: Colors.white)),
       ),
     );
   }

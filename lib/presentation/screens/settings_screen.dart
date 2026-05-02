@@ -6,6 +6,7 @@ import 'settings/manage_load_types_screen.dart';
 import 'settings/manage_customers_screen.dart';
 import 'settings/manage_car_expenses_screen.dart';
 import 'settings/manage_logistics_cos_screen.dart';
+import 'settings/manage_bank_accounts_screen.dart';
 import 'maintenance_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -46,13 +47,21 @@ class SettingsScreen extends StatelessWidget {
           ),
           _buildSettingItem(
             context,
+            'مدیریت حساب‌های بانکی من',
+            'ثبت کارت‌ها و شماره حساب‌های شخصی',
+            Icons.account_balance_wallet,
+            const ManageBankAccountsScreen(),
+            highlightColor: Colors.blueAccent,
+          ),
+          const Divider(height: 32),
+          _buildSettingItem(
+            context,
             'سرویس‌های دوره‌ای (نت)',
             'تعویض روغن، گریس‌کاری و یادآوری',
             Icons.build_circle,
             const MaintenanceScreen(),
             highlightColor: Colors.orange,
           ),
-          const Divider(height: 32),
           _buildSettingItem(
             context,
             'مدیریت رانندگان',

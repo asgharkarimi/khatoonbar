@@ -30,6 +30,7 @@ void main() async {
       Hive.openBox('maintenances'),
       Hive.openBox('logistics_cos'), 
       Hive.openBox('settings'),
+      Hive.openBox('bank_accounts'), // اضافه شد: باز کردن صندوقچه حساب‌های بانکی
     ]);
 
     // ۴. دیتای اولیه
@@ -39,10 +40,10 @@ void main() async {
     debugPrint("خطا در راه‌اندازی دیتابیس: $e");
   }
 
-  // ۵. اجرای اپلیکیشن (حتی اگر دیتابیس با خطا مواجه شد)
+  // ۵. اجرای اپلیکیشن
   runApp(const KhatoonBarApp());
 
-  // ۶. کارهای غیرضروری را بعد از لود شدن کامل انجام می‌دهیم (جلوگیری از صفحه سفید)
+  // ۶. کارهای غیرضروری را بعد از لود شدن کامل انجام می‌دهیم
   Future.microtask(() async {
     try {
       await NotificationService.init();

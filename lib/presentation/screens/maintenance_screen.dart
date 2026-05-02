@@ -13,6 +13,7 @@ class MaintenanceScreen extends StatefulWidget {
 
 class _MaintenanceScreenState extends State<MaintenanceScreen> {
   final ServiceRepository _repository = ServiceRepository();
+  final _formKey = GlobalKey<FormState>();
   List<Maintenance> _maintenances = [];
   List<Car> _cars = [];
   bool _isLoading = true;
@@ -54,31 +55,53 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('ثبت سرویس دوره‌ای'),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<Car>(
-                  value: selectedCar,
-                  items: _cars.map((c) => DropdownMenuItem(value: c, child: Text(c.name))).toList(),
-                  onChanged: (v) => setDialogState(() => selectedCar = v),
-                  decoration: const InputDecoration(labelText: 'انتخاب خودرو', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: typeController, decoration: const InputDecoration(labelText: 'نوع سرویس (مثلا: تعویض روغن)', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(controller: costController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'هزینه (تومان)', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(controller: kmController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'کیلومتر فعلی', border: OutlineInputBorder())),
-                const SizedBox(height: 12),
-                TextField(controller: nextKmController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'کیلومتر سرویس بعدی', border: OutlineInputBorder())),
-              ],
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Car>(
+                    value: selectedCar,
+                    items: _cars.map((c) => DropdownMenuItem(value: c, child: Text(c.name))).toList(),
+                    onChanged: (v) => setDialogState(() => selectedCar = v),
+                    validator: (v) => v == null ? 'لطفاً خودرو را انتخاب کنید' : null,
+                    decoration: const InputDecoration(labelText: 'انتخاب خودرو', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: typeController,
+                    validator: (v) => (v == null || v.isEmpty) ? 'نوع سرویس را وارد کنید' : null,
+                    decoration: const InputDecoration(labelText: 'نوع سرویس (مثلا: تعویض روغن)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: costController,
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.isEmpty) ? 'مبلغ را وارد کنید' : null,
+                    decoration: const InputDecoration(labelText: 'هزینه (تومان)', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: kmController,
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.isEmpty) ? 'کیلومتر فعلی را وارد کنید' : null,
+                    decoration: const InputDecoration(labelText: 'کیلومتر فعلی', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: nextKmController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'کیلومتر سرویس بعدی (اختیاری)', border: OutlineInputBorder()),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
             ElevatedButton(
               onPressed: () async {
-                if (selectedCar != null && typeController.text.isNotEmpty) {
+                if (_formKey.currentState!.validate()) {
                   final m = Maintenance(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     carId: selectedCar!.id,
@@ -93,6 +116,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   if (mounted) {
                     Navigator.pop(context);
                     _loadData();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سرویس با موفقیت ثبت شد'), backgroundColor: Colors.green));
                   }
                 }
               },

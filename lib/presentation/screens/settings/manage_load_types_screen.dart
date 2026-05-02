@@ -12,6 +12,7 @@ class ManageLoadTypesScreen extends StatefulWidget {
 class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
   List<LoadType> _loadTypes = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -35,18 +36,22 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('افزودن نوع بار جدید', style: TextStyle(fontSize: 16)),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(labelText: 'نام بار (مثلاً آجر، سیمان)'),
+        content: Form(
+          key: _formKey,
+          child: TextFormField(
+            controller: nameController,
+            decoration: const InputDecoration(labelText: 'نام بار (مثلاً آجر، سیمان)', border: OutlineInputBorder()),
+            validator: (v) => (v == null || v.isEmpty) ? 'نام بار را وارد کنید' : null,
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (_formKey.currentState!.validate()) {
                 final newType = LoadType(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text,
+                  name: nameController.text.trim(),
                 );
                 await DatabaseHelper.instance.insertLoadType(newType);
                 if (mounted) Navigator.pop(context);
@@ -56,6 +61,7 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
             child: const Text('ذخیره'),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -111,10 +117,11 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
                   },
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddLoadTypeDialog,
         backgroundColor: Colors.purple,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('افزودن نوع بار جدید', style: TextStyle(color: Colors.white)),
       ),
     );
   }

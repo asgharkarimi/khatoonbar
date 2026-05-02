@@ -21,6 +21,7 @@ class ServiceDetailsScreen extends StatefulWidget {
 
 class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with SingleTickerProviderStateMixin {
   late LoadService _currentService;
+  List<Payment> _allRelatedPayments = [];
   bool _isLoading = true;
   late TabController _tabController;
   final ServiceRepository _repository = ServiceRepository();
@@ -36,8 +37,19 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
   Future<void> _refreshData() async {
     setState(() => _isLoading = true);
     final allServices = await _repository.getAllServices();
+    final allPayments = await _repository.getPayments();
+    
     setState(() {
       _currentService = allServices.firstWhere((s) => s.id == _currentService.id);
+      
+      // اصلاح فیلتر: شامل تراکنش‌های مستقیم سرویس + تراکنش‌های کلی مشتری + تراکنش‌های کلی فروشنده
+      _allRelatedPayments = allPayments.where((p) {
+        bool isDirect = p.serviceId == _currentService.id;
+        bool isGeneralCustomer = p.customerId != null && p.customerId == _currentService.customer?.id;
+        bool isGeneralSeller = p.sellerId != null && p.sellerId == _currentService.seller.id;
+        return isDirect || isGeneralCustomer || isGeneralSeller;
+      }).toList();
+      
       _isLoading = false;
     });
   }
@@ -210,13 +222,16 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
   }
 
   Widget _buildPaymentsTab() {
+    final customerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.fromCustomer).toList();
+    final sellerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.toSeller).toList();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildPaymentListSection('دریافتی از مشتری', _currentService.collectionsFromCustomer, Colors.blue),
+        _buildPaymentListSection('تراکنش‌های مشتری', customerPayments, Colors.blue),
         const SizedBox(height: 24),
         if (_currentService.purchasePricePerTon > 0)
-          _buildPaymentListSection('پرداختی به فروشنده', _currentService.paymentsToSeller, Colors.red),
+          _buildPaymentListSection('تراکنش‌های مربوط به فروشنده', sellerPayments, Colors.red),
       ],
     );
   }
@@ -369,10 +384,11 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
         const SizedBox(height: 8),
         if (payments.isEmpty) const Text('تراکنشی ثبت نشده', style: TextStyle(color: Colors.grey, fontSize: 12))
         else ...payments.map((p) => Card(
+          elevation: p.serviceId == _currentService.id ? 2 : 0, 
+          color: p.serviceId == _currentService.id ? Colors.white : Colors.grey.shade50,
           child: ListTile(
             leading: Icon(
-              p.method == PaymentMethod.cash ? Icons.money : 
-              p.method == PaymentMethod.check ? Icons.assignment : Icons.credit_card,
+              p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet,
               color: color,
             ),
             title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -381,9 +397,11 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
               children: [
                 Text("${p.date.toPersianDate()} - ${p.description ?? ''}"),
                 if (p.method == PaymentMethod.check) ...[
-                  Text("سررسید: ${p.checkDueDate?.toPersianDate()}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                  Text("سررسید: ${p.checkDueDate?.toPersianDate()}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange)),
                   Text("بانک: ${p.bankName ?? ''} - ش: ${p.checkNumber ?? ''}", style: const TextStyle(fontSize: 10)),
-                ]
+                ],
+                if (p.serviceId != _currentService.id)
+                  const Text("(تراکنش کلی مربوط به طرف حساب)", style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic)),
               ],
             ),
             trailing: p.receiptImagePath != null || p.checkImagePath != null 
@@ -391,7 +409,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
                   icon: const Icon(Icons.image_outlined),
                   onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!, 'تصویر رسید/چک'),
                 )
-              : null,
+              : (p.method == PaymentMethod.check && !p.isCleared ? const Icon(Icons.pending, color: Colors.orange, size: 20) : null),
           ),
         )).toList(),
       ],

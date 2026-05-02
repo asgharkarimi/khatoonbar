@@ -15,6 +15,7 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
   List<CarExpense> _expenses = [];
   List<Car> _cars = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -42,51 +43,63 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('ثبت هزینه جدید ماشین', style: TextStyle(fontSize: 16)),
+          title: const Text('ثبت هزینه جدید ماشین', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<Car>(
-                  decoration: const InputDecoration(labelText: 'انتخاب ماشین'),
-                  items: _cars.map((car) => DropdownMenuItem(
-                    value: car,
-                    child: Text(car.name),
-                  )).toList(),
-                  onChanged: (value) => setDialogState(() => selectedCar = value),
-                ),
-                TextField(
-                  controller: descriptionController,
-                  decoration: const InputDecoration(labelText: 'شرح هزینه (مثلاً لاستیک، بیمه)'),
-                ),
-                TextField(
-                  controller: amountController,
-                  decoration: const InputDecoration(labelText: 'مبلغ (تومان)'),
-                  keyboardType: TextInputType.number,
-                ),
-              ],
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Car>(
+                    decoration: const InputDecoration(labelText: 'انتخاب ماشین', border: OutlineInputBorder()),
+                    items: _cars.map((car) => DropdownMenuItem(
+                      value: car,
+                      child: Text(car.name),
+                    )).toList(),
+                    validator: (v) => v == null ? 'لطفاً ماشین را انتخاب کنید' : null,
+                    onChanged: (value) => setDialogState(() => selectedCar = value),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: descriptionController,
+                    decoration: const InputDecoration(labelText: 'شرح هزینه (مثلاً لاستیک، بیمه)', border: OutlineInputBorder()),
+                    validator: (v) => (v == null || v.isEmpty) ? 'شرح هزینه را وارد کنید' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: amountController,
+                    decoration: const InputDecoration(labelText: 'مبلغ (تومان)', border: OutlineInputBorder()),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.isEmpty) ? 'مبلغ را وارد کنید' : null,
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
             ElevatedButton(
               onPressed: () async {
-                if (selectedCar != null && amountController.text.isNotEmpty) {
+                if (_formKey.currentState!.validate()) {
                   final expense = CarExpense(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     carId: selectedCar!.id,
-                    description: descriptionController.text,
+                    description: descriptionController.text.trim(),
                     amount: double.tryParse(amountController.text) ?? 0,
                     date: DateTime.now(),
                   );
                   await DatabaseHelper.instance.insertCarExpense(expense);
-                  if (mounted) Navigator.pop(context);
-                  _loadData();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _loadData();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('هزینه با موفقیت ثبت شد'), backgroundColor: Colors.green));
+                  }
                 }
               },
               child: const Text('ذخیره'),
             ),
           ],
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
     );
@@ -119,15 +132,17 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                           backgroundColor: Colors.orange.withOpacity(0.1),
                           child: const Icon(Icons.build, color: Colors.orange),
                         ),
-                        title: Text("${car.name} - ${expense.description}"),
+                        title: Text("${car.name} - ${expense.description}", style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(expense.date.toPersianDate()),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              "${AppFormatters.formatCurrency(expense.amount)} تومان",
+                              "${AppFormatters.formatCurrency(expense.amount)}",
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
                             ),
+                            const SizedBox(width: 4),
+                            const Text("تومان", style: TextStyle(fontSize: 10, color: Colors.grey)),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                               onPressed: () async {
@@ -155,11 +170,12 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                     );
                   },
                 ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat, // وسط‌چین افقی
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddExpenseDialog,
-        label: const Text('ثبت هزینه جدید'),
-        icon: const Icon(Icons.add),
+        backgroundColor: Colors.orange,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('ثبت هزینه جدید ماشین', style: TextStyle(color: Colors.white)),
       ),
     );
   }

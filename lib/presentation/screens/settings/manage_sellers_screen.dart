@@ -12,6 +12,7 @@ class ManageSellersScreen extends StatefulWidget {
 class _ManageSellersScreenState extends State<ManageSellersScreen> {
   List<Seller> _sellers = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -31,27 +32,54 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
   void _showSellerDialog({Seller? seller}) {
     final nameController = TextEditingController(text: seller?.name);
     final productController = TextEditingController(text: seller?.product);
+    final bankController = TextEditingController(text: seller?.bankName);
+    final accountController = TextEditingController(text: seller?.accountNumber);
+    final ownerController = TextEditingController(text: seller?.accountOwner);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(seller == null ? 'افزودن فروشنده جدید' : 'ویرایش فروشنده', style: const TextStyle(fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'نام شرکت یا فروشنده')),
-            TextField(controller: productController, decoration: const InputDecoration(labelText: 'محصول (مثلاً ماسه، آجر)')),
-          ],
+        content: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: nameController, 
+                  decoration: const InputDecoration(labelText: 'نام شرکت یا فروشنده (اجباری)', border: OutlineInputBorder()),
+                  validator: (v) => (v == null || v.isEmpty) ? 'نام را وارد کنید' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: productController, 
+                  decoration: const InputDecoration(labelText: 'محصول (مثلاً ماسه، آجر)', border: OutlineInputBorder()),
+                ),
+                const Divider(height: 32),
+                const Text('اطلاعات بانکی (اختیاری)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                const SizedBox(height: 12),
+                TextFormField(controller: bankController, decoration: const InputDecoration(labelText: 'نام بانک', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: accountController, decoration: const InputDecoration(labelText: 'شماره حساب/کارت', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+                TextFormField(controller: ownerController, decoration: const InputDecoration(labelText: 'نام صاحب حساب', border: OutlineInputBorder())),
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (_formKey.currentState!.validate()) {
                 final newSeller = Seller(
                   id: seller?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text,
-                  product: productController.text,
+                  name: nameController.text.trim(),
+                  product: productController.text.trim(),
+                  bankName: bankController.text.trim(),
+                  accountNumber: accountController.text.trim(),
+                  accountOwner: ownerController.text.trim(),
                 );
                 await DatabaseHelper.instance.insertSeller(newSeller);
                 if (mounted) Navigator.pop(context);
@@ -61,6 +89,7 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
             child: const Text('ذخیره'),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -112,7 +141,6 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
                                     ],
                                   ),
                                 );
-
                                 if (confirm == true) {
                                   await DatabaseHelper.instance.delete('sellers', seller.id);
                                   _refreshSellers();
@@ -126,10 +154,11 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
                   },
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showSellerDialog(),
         backgroundColor: Colors.teal,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('افزودن فروشنده جدید', style: TextStyle(color: Colors.white)),
       ),
     );
   }

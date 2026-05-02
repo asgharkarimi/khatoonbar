@@ -13,6 +13,7 @@ class ManageCarsScreen extends StatefulWidget {
 class _ManageCarsScreenState extends State<ManageCarsScreen> {
   List<Car> _cars = [];
   bool _isLoading = true;
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -38,32 +39,36 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
       builder: (context) => AlertDialog(
         title: Text(car == null ? 'افزودن ماشین جدید' : 'ویرایش ماشین', style: const TextStyle(fontSize: 16)),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: nameController, 
-                decoration: const InputDecoration(labelText: 'نام ماشین (مثلاً فوتون)'),
-              ),
-              const SizedBox(height: 16),
-              const Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              IranianPlateInput(
-                initialValue: plateValue,
-                onChanged: (v) => plateValue = v,
-              ),
-            ],
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  controller: nameController, 
+                  decoration: const InputDecoration(labelText: 'نام ماشین (اجباری)', border: OutlineInputBorder()),
+                  validator: (v) => (v == null || v.isEmpty) ? 'نام ماشین را وارد کنید' : null,
+                ),
+                const SizedBox(height: 16),
+                const Text('شماره پلاک:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                IranianPlateInput(
+                  initialValue: plateValue,
+                  onChanged: (v) => plateValue = v,
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
           ElevatedButton(
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (_formKey.currentState!.validate()) {
                 final newCar = Car(
                   id: car?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                  name: nameController.text,
+                  name: nameController.text.trim(),
                   plate: plateValue,
                 );
                 await DatabaseHelper.instance.insertCar(newCar);
@@ -74,6 +79,7 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
             child: const Text('ذخیره'),
           ),
         ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }
@@ -144,10 +150,11 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                   },
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCarDialog(),
         backgroundColor: Colors.orange,
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('افزودن ماشین جدید', style: TextStyle(color: Colors.white)),
       ),
     );
   }

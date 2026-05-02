@@ -185,7 +185,7 @@ class PdfService {
     }
   }
 
-  /// چاپ صورت‌حساب شرکت/فروشنده (A4)
+  /// چاپ صورت‌حساب فروشنده (A4)
   static Future<bool> generateAndPrintSellerLedger(Seller seller, List<LoadService> services, List<Payment> payments) async {
     try {
       final pdf = pw.Document();
@@ -198,7 +198,7 @@ class PdfService {
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
           theme: theme,
-          header: (context) => _buildHeader("صورت‌حساب مالی شرکت: ${seller.name}"),
+          header: (context) => _buildHeader("صورت‌حساب مالی فروشنده: ${seller.name}"),
           footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
           build: (context) => [
             _buildSectionTitle("لیست بارهای خریداری شده"),
