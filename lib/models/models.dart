@@ -168,6 +168,7 @@ class CarExpense {
   final String description; 
   final double amount;
   final DateTime date;
+  final String? receiptImagePath;
 
   CarExpense({
     required this.id,
@@ -175,6 +176,7 @@ class CarExpense {
     required this.description,
     required this.amount,
     required this.date,
+    this.receiptImagePath,
   });
 
   Map<String, dynamic> toMap() => {
@@ -183,6 +185,7 @@ class CarExpense {
     'description': description,
     'amount': amount,
     'date': date.toIso8601String(),
+    'receiptImagePath': receiptImagePath,
   };
 
   factory CarExpense.fromMap(Map<String, dynamic> map) => CarExpense(
@@ -191,6 +194,7 @@ class CarExpense {
     description: map['description'],
     amount: (map['amount'] as num).toDouble(),
     date: DateTime.parse(map['date']),
+    receiptImagePath: map['receiptImagePath'],
   );
 }
 
@@ -204,6 +208,7 @@ class Maintenance {
   final int? nextKm;
   final DateTime? nextDate;
   final String? description;
+  final String? receiptImagePath;
 
   Maintenance({
     required this.id,
@@ -215,6 +220,7 @@ class Maintenance {
     this.nextKm,
     this.nextDate,
     this.description,
+    this.receiptImagePath,
   });
 
   Map<String, dynamic> toMap() => {
@@ -227,6 +233,7 @@ class Maintenance {
     'nextKm': nextKm,
     'nextDate': nextDate?.toIso8601String(),
     'description': description,
+    'receiptImagePath': receiptImagePath,
   };
 
   factory Maintenance.fromMap(Map<String, dynamic> map) => Maintenance(
@@ -239,6 +246,7 @@ class Maintenance {
     nextKm: map['nextKm'],
     nextDate: map['nextDate'] != null ? DateTime.parse(map['nextDate']) : null,
     description: map['description'],
+    receiptImagePath: map['receiptImagePath'],
   );
 }
 
@@ -410,10 +418,9 @@ class ServiceExpenses {
     this.otherExpenses = const [],
   });
 
-  double get total {
-    double othersTotal = otherExpenses.fold(0, (sum, item) => sum + item.amount);
-    return billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + othersTotal;
-  }
+  double get total => billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + otherExpenses.fold(0, (sum, item) => sum + item.amount);
+
+  double get owedToLogistics => billOfLadingCost + commission;
 
   Map<String, dynamic> toMap() => {
     'billOfLadingCost': billOfLadingCost,
@@ -441,7 +448,7 @@ class ServiceExpenses {
   }
 }
 
-enum PaymentType { toSeller, fromCustomer }
+enum PaymentType { toSeller, fromCustomer, toLogistics, toDriver }
 enum PaymentMethod { cash, check, card, sheba }
 
 class Payment {
@@ -449,7 +456,9 @@ class Payment {
   final String? serviceId;
   final String? sellerId;
   final String? customerId;
-  final String? myAccountId; // فیلد جدید: اتصال به حساب بانکی شخصی من
+  final String? logisticsId;
+  final String? driverId;
+  final String? myAccountId; 
   final PaymentType type;
   final PaymentMethod method;
   final double amount;
@@ -467,6 +476,8 @@ class Payment {
     this.serviceId,
     this.sellerId,
     this.customerId,
+    this.logisticsId,
+    this.driverId,
     this.myAccountId,
     required this.type,
     required this.method,
@@ -486,6 +497,8 @@ class Payment {
     'serviceId': serviceId,
     'sellerId': sellerId,
     'customerId': customerId,
+    'logisticsId': logisticsId,
+    'driverId': driverId,
     'myAccountId': myAccountId,
     'type': type.index,
     'method': method.index,
@@ -505,6 +518,8 @@ class Payment {
     serviceId: map['serviceId'],
     sellerId: map['sellerId'],
     customerId: map['customerId'],
+    logisticsId: map['logisticsId'],
+    driverId: map['driverId'],
     myAccountId: map['myAccountId'],
     type: PaymentType.values[map['type']],
     method: PaymentMethod.values[map['method']],
@@ -537,6 +552,8 @@ class LoadService {
   final double purchasePricePerTon;
   final List<Payment> paymentsToSeller;
   final List<Payment> collectionsFromCustomer;
+  final List<Payment> paymentsToLogistics;
+  final List<Payment> paymentsToDriver;
   final ServiceExpenses expenses;
   final String? purchaseInvoiceImagePath;
 
@@ -564,6 +581,8 @@ class LoadService {
     this.purchasePricePerTon = 0,
     this.paymentsToSeller = const [],
     this.collectionsFromCustomer = const [],
+    this.paymentsToLogistics = const [],
+    this.paymentsToDriver = const [],
     required this.expenses,
     this.purchaseInvoiceImagePath,
     this.fareAccountNumber,
@@ -579,7 +598,12 @@ class LoadService {
       .where((p) => p.isCleared)
       .fold(0.0, (sum, item) => sum + item.amount);
       
+  double get pendingSellerChecks => paymentsToSeller
+      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
+
   double get remainingDebtToSeller => totalPurchaseAmount - totalPaidToSeller;
+  double get finalBalanceToSeller => totalPurchaseAmount - totalPaidToSeller - pendingSellerChecks;
 
   double get totalTransportAmount => weight * transportPricePerTon;
   double get totalServicePriceForCustomer => totalPurchaseAmount + totalTransportAmount;
@@ -588,12 +612,37 @@ class LoadService {
       .where((p) => p.isCleared)
       .fold(0.0, (sum, item) => sum + item.amount);
 
+  double get pendingCustomerChecks => collectionsFromCustomer
+      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
+
   double get remainingCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer;
+  double get finalBalanceCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer - pendingCustomerChecks;
+
+  double get totalPaidToLogistics => paymentsToLogistics
+      .where((p) => p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
+      
+  double get pendingLogisticsChecks => paymentsToLogistics
+      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
+
+  double get remainingLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics;
+  double get finalBalanceLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics - pendingLogisticsChecks;
+
+  double get totalPaidToDriver => paymentsToDriver
+      .where((p) => p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
+
+  double get pendingDriverChecks => paymentsToDriver
+      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .fold(0.0, (sum, item) => sum + item.amount);
 
   double get netProfit => totalTransportAmount - expenses.total;
 
   bool get isSellerSettled => remainingDebtToSeller <= 0;
   bool get isCustomerSettled => remainingCustomerDebt <= 0;
+  bool get isLogisticsSettled => remainingLogisticsDebt <= 0;
 
   Map<String, dynamic> toMap() {
     return {
@@ -631,6 +680,8 @@ class LoadService {
     LogisticsCo? logisticsCo,
     List<Payment> paymentsToSeller = const [],
     List<Payment> collectionsFromCustomer = const [],
+    List<Payment> paymentsToLogistics = const [],
+    List<Payment> paymentsToDriver = const [],
   }) {
     return LoadService(
       id: map['id'],
@@ -649,6 +700,8 @@ class LoadService {
       purchasePricePerTon: (map['purchasePricePerTon'] as num).toDouble(),
       paymentsToSeller: paymentsToSeller,
       collectionsFromCustomer: collectionsFromCustomer,
+      paymentsToLogistics: paymentsToLogistics,
+      paymentsToDriver: paymentsToDriver,
       expenses: ServiceExpenses.fromMap(jsonDecode(map['expenses'])),
       purchaseInvoiceImagePath: map['purchaseInvoiceImagePath'],
       fareAccountNumber: map['fareAccountNumber'],

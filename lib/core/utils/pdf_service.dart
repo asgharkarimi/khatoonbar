@@ -16,7 +16,6 @@ class PdfService {
   static String _fix(String? text) {
     if (text == null || text.isEmpty) return "";
     try {
-      // شایپر متن فارسی را معکوس می‌کند، پس در نمایش باید LTR باشیم
       return PersianTextShaper.shape(text.trim());
     } catch (e) {
       return text ?? "";
@@ -41,12 +40,13 @@ class PdfService {
     );
   }
 
-  /// چاپ فاکتور تک سرویس (A5)
   static Future<bool> generateAndPrintService(LoadService service) async {
     try {
       final pdf = pw.Document();
       final theme = await _getTheme();
       final isTransportOnly = service.purchasePricePerTon == 0;
+
+      String logisticsName = service.logisticsCo?.name ?? service.logisticsName ?? "";
 
       pdf.addPage(
         pw.Page(
@@ -74,8 +74,8 @@ class PdfService {
                 _rowInfo("مشتری:", service.customer?.fullName ?? "---"),
                 _rowInfo("راننده:", service.driver.fullName),
                 _rowInfo("خودرو:", service.car.name),
-                if (service.logisticsCo != null)
-                  _rowInfo("باربری:", service.logisticsCo!.name),
+                if (logisticsName.isNotEmpty)
+                  _rowInfo("باربری:", logisticsName),
                 
                 pw.SizedBox(height: 10),
                 _buildSectionTitle("جزئیات بار"),
@@ -130,7 +130,6 @@ class PdfService {
     }
   }
 
-  /// چاپ صورت‌حساب مشتری (A4)
   static Future<bool> generateAndPrintCustomerLedger(Customer customer, List<LoadService> services, List<Payment> payments) async {
     try {
       final pdf = pw.Document();
@@ -138,6 +137,7 @@ class PdfService {
 
       double totalDebt = services.fold(0, (sum, s) => sum + s.totalServicePriceForCustomer);
       double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
+      double pendingChecks = payments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
 
       pdf.addPage(
         pw.MultiPage(
@@ -160,19 +160,19 @@ class PdfService {
             pw.SizedBox(height: 20),
             _buildSectionTitle("لیست دریافتی‌ها"),
             _buildTable(
-              ['ردیف', 'تاریخ', 'روش', 'توضیحات/بانک', 'مبلغ'],
+              ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
               payments.asMap().entries.map((e) => [
                 (e.key + 1).toString().toPersianDigit(),
                 e.value.date.toPersianDate(),
                 _getPaymentMethodName(e.value.method),
-                e.value.bankName ?? "-",
+                e.value.isCleared ? "وصول شده" : "در جریان",
                 AppFormatters.formatCurrency(e.value.amount),
               ]).toList(),
             ),
             pw.SizedBox(height: 30),
             pw.Align(
               alignment: pw.Alignment.centerLeft,
-              child: _buildSummaryBox("بدهی کل:", totalDebt, "دریافتی کل:", totalPaid),
+              child: _buildSummaryBox("بدهی کل:", totalDebt, "دریافتی نقد:", totalPaid, "چک در جریان:", pendingChecks),
             ),
           ],
         ),
@@ -185,7 +185,6 @@ class PdfService {
     }
   }
 
-  /// چاپ صورت‌حساب فروشنده (A4)
   static Future<bool> generateAndPrintSellerLedger(Seller seller, List<LoadService> services, List<Payment> payments) async {
     try {
       final pdf = pw.Document();
@@ -193,6 +192,7 @@ class PdfService {
 
       double totalDebt = services.fold(0, (sum, s) => sum + s.totalPurchaseAmount);
       double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
+      double pendingChecks = payments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
 
       pdf.addPage(
         pw.MultiPage(
@@ -216,19 +216,19 @@ class PdfService {
             pw.SizedBox(height: 20),
             _buildSectionTitle("لیست پرداختی‌ها"),
             _buildTable(
-              ['ردیف', 'تاریخ', 'روش', 'توضیحات/بانک', 'مبلغ'],
+              ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
               payments.asMap().entries.map((e) => [
                 (e.key + 1).toString().toPersianDigit(),
                 e.value.date.toPersianDate(),
                 _getPaymentMethodName(e.value.method),
-                e.value.bankName ?? "-",
+                e.value.isCleared ? "پرداخت شده" : "چک معوق",
                 AppFormatters.formatCurrency(e.value.amount),
               ]).toList(),
             ),
             pw.SizedBox(height: 30),
             pw.Align(
               alignment: pw.Alignment.centerLeft,
-              child: _buildSummaryBox("بدهی کل:", totalDebt, "پرداختی کل:", totalPaid),
+              child: _buildSummaryBox("بدهی کل ما:", totalDebt, "پرداختی نقد:", totalPaid, "چک در جریان:", pendingChecks),
             ),
           ],
         ),
@@ -241,7 +241,116 @@ class PdfService {
     }
   }
 
-  /// چاپ لیست کلی (گزارش عمومی)
+  static Future<bool> generateAndPrintLogisticsLedger(LogisticsCo co, List<LoadService> services, List<Payment> payments) async {
+    try {
+      final pdf = pw.Document();
+      final theme = await _getTheme();
+
+      double totalDebt = services.fold(0, (sum, s) => sum + s.expenses.owedToLogistics);
+      double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
+      double pendingChecks = payments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: theme,
+          header: (context) => _buildHeader("صورت‌حساب مالی باربری: ${co.name}"),
+          footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
+          build: (context) => [
+            _buildSectionTitle("لیست سرویس‌های انجام شده (هزینه بارنامه و کمیسیون)"),
+            _buildTable(
+              ['ردیف', 'تاریخ', 'نوع بار', 'کد سفارش', 'مبلغ طلب'],
+              services.asMap().entries.map((e) => [
+                (e.key + 1).toString().toPersianDigit(),
+                e.value.date.toPersianDate(),
+                e.value.loadType.name,
+                e.value.orderCode.toPersianDigit(),
+                AppFormatters.formatCurrency(e.value.expenses.owedToLogistics),
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 20),
+            _buildSectionTitle("لیست پرداختی‌های ما"),
+            _buildTable(
+              ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
+              payments.asMap().entries.map((e) => [
+                (e.key + 1).toString().toPersianDigit(),
+                e.value.date.toPersianDate(),
+                _getPaymentMethodName(e.value.method),
+                e.value.isCleared ? "پرداخت شده" : "چک معوق",
+                AppFormatters.formatCurrency(e.value.amount),
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 30),
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: _buildSummaryBox("بدهی کل ما:", totalDebt, "پرداختی نقد:", totalPaid, "چک در جریان:", pendingChecks),
+            ),
+          ],
+        ),
+      );
+
+      return await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: 'Ledger-${co.name}');
+    } catch (e) {
+      debugPrint("PDF Logistics Ledger Error: $e");
+      return false;
+    }
+  }
+
+  static Future<bool> generateAndPrintDriverLedger(Driver driver, List<LoadService> services, List<Payment> payments) async {
+    try {
+      final pdf = pw.Document();
+      final theme = await _getTheme();
+
+      double totalEarned = services.fold(0, (sum, s) => sum + s.netProfit);
+      double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
+      double pendingChecks = payments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: theme,
+          header: (context) => _buildHeader("صورت‌حساب مالی راننده: ${driver.fullName}"),
+          footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
+          build: (context) => [
+            _buildSectionTitle("لیست سرویس‌های انجام شده (سود خالص)"),
+            _buildTable(
+              ['ردیف', 'تاریخ', 'نوع بار', 'کد سفارش', 'سود راننده'],
+              services.asMap().entries.map((e) => [
+                (e.key + 1).toString().toPersianDigit(),
+                e.value.date.toPersianDate(),
+                e.value.loadType.name,
+                e.value.orderCode.toPersianDigit(),
+                AppFormatters.formatCurrency(e.value.netProfit),
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 20),
+            _buildSectionTitle("لیست پرداختی‌های ما به راننده"),
+            _buildTable(
+              ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
+              payments.asMap().entries.map((e) => [
+                (e.key + 1).toString().toPersianDigit(),
+                e.value.date.toPersianDate(),
+                _getPaymentMethodName(e.value.method),
+                e.value.isCleared ? "پرداخت شده" : "چک معوق",
+                AppFormatters.formatCurrency(e.value.amount),
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 30),
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: _buildSummaryBox("کل طلب راننده:", totalEarned, "پرداختی نقد:", totalPaid, "چک در جریان:", pendingChecks),
+            ),
+          ],
+        ),
+      );
+
+      return await Printing.layoutPdf(onLayout: (format) async => pdf.save(), name: 'Ledger-${driver.fullName}');
+    } catch (e) {
+      debugPrint("PDF Driver Ledger Error: $e");
+      return false;
+    }
+  }
+
   static Future<bool> generateAndPrintGeneralReport(String title, List<String> headers, List<List<String>> data) async {
     try {
       final pdf = pw.Document();
@@ -322,16 +431,17 @@ class PdfService {
     );
   }
 
-  static pw.Widget _buildSummaryBox(String label1, double amount1, String label2, double amount2) {
-    final balance = amount1 - amount2;
+  static pw.Widget _buildSummaryBox(String label1, double amount1, String label2, double amount2, String label3, double amount3) {
+    final balance = amount1 - amount2 - amount3;
     return pw.Container(
-      width: 200,
+      width: 220,
       padding: const pw.EdgeInsets.all(8),
       decoration: pw.BoxDecoration(color: accentColor, border: pw.Border.all(color: primaryColor, width: 0.5)),
       child: pw.Column(
         children: [
           _sumRow(label1, amount1),
           _sumRow(label2, amount2),
+          _sumRow(label3, amount3),
           pw.Divider(thickness: 0.5),
           _sumRow("مانده نهایی:", balance, isBold: true),
         ],
@@ -343,7 +453,7 @@ class PdfService {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        pw.Text(_fix("${AppFormatters.formatCurrency(amount)} تومان"), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : null)),
+        pw.Text(_fix("${AppFormatters.formatCurrency(amount.abs())} تومان"), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : null)),
         pw.Text(_fix(label), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : null)),
       ],
     );

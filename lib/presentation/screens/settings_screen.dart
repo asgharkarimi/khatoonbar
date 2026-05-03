@@ -8,6 +8,8 @@ import 'settings/manage_car_expenses_screen.dart';
 import 'settings/manage_logistics_cos_screen.dart';
 import 'settings/manage_bank_accounts_screen.dart';
 import 'maintenance_screen.dart';
+import 'transaction_history_screen.dart';
+import '../../core/utils/backup_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -35,7 +37,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const Text(
-                  'نسخه 1.0.0',
+                  'نسخه 1.1.0',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -47,13 +49,21 @@ class SettingsScreen extends StatelessWidget {
           ),
           _buildSettingItem(
             context,
+            'دفتر کل (ریز تراکنش‌ها)',
+            'مشاهده تمامی واریزها، برداشت‌ها و هزینه‌ها',
+            Icons.receipt_long,
+            const TransactionHistoryScreen(),
+            highlightColor: Colors.deepPurple,
+          ),
+          const Divider(height: 32),
+          _buildSettingItem(
+            context,
             'مدیریت حساب‌های بانکی من',
             'ثبت کارت‌ها و شماره حساب‌های شخصی',
             Icons.account_balance_wallet,
             const ManageBankAccountsScreen(),
             highlightColor: Colors.blueAccent,
           ),
-          const Divider(height: 32),
           _buildSettingItem(
             context,
             'سرویس‌های دوره‌ای (نت)',
@@ -112,6 +122,26 @@ class SettingsScreen extends StatelessWidget {
             Icons.category,
             const ManageLoadTypesScreen(),
           ),
+          const Divider(height: 32),
+          ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.indigoAccent, child: Icon(Icons.backup, color: Colors.white)),
+            title: const Text('پشتیبان‌گیری از داده‌ها', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            subtitle: const Text('ارسال فایل پشتیبان به تلگرام، ایتا یا حافظه', style: TextStyle(fontSize: 12)),
+            onTap: () => BackupService.createBackup(),
+          ),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const CircleAvatar(backgroundColor: Colors.amber, child: Icon(Icons.restore, color: Colors.white)),
+            title: const Text('بازیابی اطلاعات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            subtitle: const Text('انتخاب فایل JSON برای بازگردانی داده‌ها', style: TextStyle(fontSize: 12)),
+            onTap: () async {
+              bool success = await BackupService.restoreBackup();
+              if (success && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('اطلاعات با موفقیت بازیابی شد. لطفا برنامه را مجددا باز کنید.'), backgroundColor: Colors.green));
+              }
+            },
+          ),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -123,7 +153,6 @@ class SettingsScreen extends StatelessWidget {
     String subtitle,
     IconData icon,
     Widget? targetScreen, {
-    bool isSwitch = false,
     Color highlightColor = Colors.green,
   }) {
     return Card(
@@ -140,9 +169,7 @@ class SettingsScreen extends StatelessWidget {
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-        trailing: isSwitch
-            ? Switch(value: true, onChanged: (v) {})
-            : const Icon(Icons.arrow_forward_ios, size: 16),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: targetScreen != null
             ? () => Navigator.push(context, MaterialPageRoute(builder: (context) => targetScreen))
             : null,

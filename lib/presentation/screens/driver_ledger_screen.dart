@@ -7,18 +7,17 @@ import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_service.dart';
 import '../../models/models.dart';
 import 'add_payment_screen.dart';
-import 'bulk_collection_screen.dart';
 import 'service_details_screen.dart';
 
-class CustomerLedgerScreen extends StatefulWidget {
-  final Customer customer;
-  const CustomerLedgerScreen({super.key, required this.customer});
+class DriverLedgerScreen extends StatefulWidget {
+  final Driver driver;
+  const DriverLedgerScreen({super.key, required this.driver});
 
   @override
-  State<CustomerLedgerScreen> createState() => _CustomerLedgerScreenState();
+  State<DriverLedgerScreen> createState() => _DriverLedgerScreenState();
 }
 
-class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with SingleTickerProviderStateMixin {
+class _DriverLedgerScreenState extends State<DriverLedgerScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<LoadService> _services = [];
   List<Payment> _generalPayments = [];
@@ -43,14 +42,14 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
     final allPayments = await DatabaseHelper.instance.getAllPayments();
     
     setState(() {
-      _services = allServices.where((s) => s.customer?.id == widget.customer.id).toList();
+      _services = allServices.where((s) => s.driver.id == widget.driver.id).toList();
       
-      final customerServiceIds = _services.map((s) => s.id).toSet();
+      final driverServiceIds = _services.map((s) => s.id).toSet();
       
       final filteredPayments = allPayments.where((p) => 
-        p.type == PaymentType.fromCustomer && (
-          p.customerId == widget.customer.id || 
-          (p.serviceId != null && customerServiceIds.contains(p.serviceId))
+        p.type == PaymentType.toDriver && (
+          p.driverId == widget.driver.id || 
+          (p.serviceId != null && driverServiceIds.contains(p.serviceId))
         )
       ).toList();
 
@@ -73,6 +72,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
       sellerId: p.sellerId,
       customerId: p.customerId,
       logisticsId: p.logisticsId,
+      driverId: p.driverId,
       myAccountId: p.myAccountId,
       type: p.type,
       method: p.method,
@@ -113,46 +113,35 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
 
   @override
   Widget build(BuildContext context) {
-    double totalDebt = _services.fold(0, (sum, s) => sum + s.totalServicePriceForCustomer);
+    double totalEarned = _services.fold(0, (sum, s) => sum + s.netProfit);
     double totalPaid = _generalPayments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
     double pendingChecks = _generalPayments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
-    double balance = totalDebt - totalPaid - pendingChecks;
+    double balance = totalEarned - totalPaid - pendingChecks;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("صورت‌حساب: ${widget.customer.fullName}"),
+        title: Text("صورت‌حساب راننده: ${widget.driver.fullName}"),
         actions: [
-          if (widget.customer.accountNumber != null && widget.customer.accountNumber!.isNotEmpty)
+          if (widget.driver.accountNumber != null && widget.driver.accountNumber!.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.copy_all_outlined),
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: widget.customer.accountNumber!));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("شماره حساب مشتری کپی شد")));
+                Clipboard.setData(ClipboardData(text: widget.driver.accountNumber!));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("شماره حساب راننده کپی شد")));
               },
               tooltip: 'کپی شماره حساب',
             ),
           IconButton(
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => BulkCollectionScreen(initialCustomer: widget.customer))
-              );
-              if (result == true) _loadData();
-            },
-            tooltip: 'دریافت گروهی',
-          ),
-          IconButton(
             icon: const Icon(Icons.picture_as_pdf),
-            onPressed: () => PdfService.generateAndPrintCustomerLedger(widget.customer, _services, _generalPayments),
+            onPressed: () => PdfService.generateAndPrintDriverLedger(widget.driver, _services, _generalPayments),
             tooltip: 'خروجی PDF',
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: "سرویس‌ها (طلب ما)", icon: Icon(Icons.history_outlined)),
-            Tab(text: "دریافتی‌های ما", icon: Icon(Icons.price_check_outlined)),
+            Tab(text: "سرویس‌ها (طلب راننده)", icon: Icon(Icons.history_outlined)),
+            Tab(text: "پرداختی‌های ما", icon: Icon(Icons.payments_outlined)),
           ],
         ),
       ),
@@ -160,7 +149,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
         ? const Center(child: CircularProgressIndicator())
         : Column(
             children: [
-              _buildBalanceHeader(totalDebt, totalPaid, pendingChecks, balance),
+              _buildBalanceHeader(totalEarned, totalPaid, pendingChecks, balance),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -183,7 +172,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   id: 'temp', 
                   orderCode: 'TEMP',
                   car: Car(id: '', name: '', plate: ''), 
-                  driver: Driver(id: '', firstName: '', lastName: '', phone: ''), 
+                  driver: widget.driver, 
                   loadType: LoadType(id: '', name: ''), 
                   seller: Seller(id: '', name: '', product: ''), 
                   origin: '', 
@@ -191,25 +180,24 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   date: DateTime.now(), 
                   weight: 0, 
                   transportPricePerTon: 0, 
-                  expenses: ServiceExpenses(),
-                  customer: widget.customer,
+                  expenses: ServiceExpenses()
                 ),
-                isCollection: true,
-                customCustomerId: widget.customer.id,
+                isCollection: false,
+                customDriverId: widget.driver.id,
               ),
             ),
           );
           if (result == true) _loadData();
         },
-        label: const Text("ثبت دریافتی جدید"),
+        label: const Text("ثبت پرداختی جدید"),
         icon: const Icon(Icons.add_card),
-        backgroundColor: Colors.blue.shade800,
+        backgroundColor: Colors.teal.shade800,
       ),
     );
   }
 
-  Widget _buildBalanceHeader(double debt, double paid, double checks, double balance) {
-    String statusLabel = "مانده طلب نهایی ما:";
+  Widget _buildBalanceHeader(double earned, double paid, double checks, double balance) {
+    String statusLabel = "مانده طلب راننده:";
     if (balance <= 0) statusLabel = "تسویه شده / بستانکار:";
 
     return Container(
@@ -217,9 +205,9 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
       child: Card(
-        color: balance > 0 ? Colors.blue.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
+        color: balance > 0 ? Colors.teal.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: balance > 0 ? Colors.blue.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: balance > 0 ? Colors.teal.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -230,7 +218,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   Text(statusLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(
                     "${AppFormatters.formatCurrency(balance.abs())} تومان",
-                    style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.blue.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), fontSize: 18),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.teal.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), fontSize: 18),
                   ),
                 ],
               ),
@@ -239,11 +227,11 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _headerInfoItem("کل فاکتورها", debt, Colors.black87),
+                    _headerInfoItem("کل درآمد راننده", earned, Colors.black87),
                     const VerticalDivider(),
-                    _headerInfoItem("وصول شده", paid, Colors.green.shade700),
+                    _headerInfoItem("پرداخت شده", paid, Colors.green.shade700),
                     const VerticalDivider(),
-                    _headerInfoItem("چک در جریان", checks, Colors.orange.shade800),
+                    _headerInfoItem("چک معلق", checks, Colors.orange.shade800),
                   ],
                 ),
               ),
@@ -312,7 +300,7 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
             if (s.orderCode.isNotEmpty) Text("کد سفارش: ${s.orderCode.toPersianDigit()}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
           ],
         ),
-        trailing: Text(AppFormatters.formatCurrency(s.totalServicePriceForCustomer), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+        trailing: Text(AppFormatters.formatCurrency(s.netProfit), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
       ),
     );
   }
@@ -341,8 +329,8 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
             ListTile(
               onLongPress: () => _showPaymentOptions(p),
               leading: CircleAvatar(
-                backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.green.shade100,
-                child: Icon(p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, color: isPendingCheck ? progressBarColor : Colors.green),
+                backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.teal.shade50,
+                child: Icon(p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, color: isPendingCheck ? progressBarColor : Colors.teal),
               ),
               title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Column(

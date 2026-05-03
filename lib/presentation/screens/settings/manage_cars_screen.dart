@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../models/models.dart';
 import '../../widgets/iranian_plate_input.dart';
+import '../../widgets/plate_widget.dart';
 
 class ManageCarsScreen extends StatefulWidget {
   const ManageCarsScreen({super.key});
@@ -103,47 +104,50 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(color: Colors.grey.shade200),
                       ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.orange.withOpacity(0.1),
-                          child: const Icon(Icons.local_shipping, color: Colors.orange),
-                        ),
-                        title: Text(car.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: car.plate != null && car.plate!.isNotEmpty 
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 4.0),
-                                child: Text("پلاک: ${car.plate}"),
-                              )
-                            : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                              onPressed: () => _showCarDialog(car: car),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                              onPressed: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('تایید حذف'),
-                                    content: Text('آیا از حذف "${car.name}" اطمینان دارید؟'),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
-                                    ],
-                                  ),
-                                );
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.orange.withOpacity(0.1),
+                            child: const Icon(Icons.local_shipping, color: Colors.orange),
+                          ),
+                          title: Text(car.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: car.plate != null && car.plate!.isNotEmpty && car.plate != "---"
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: PlateWidget(plate: car.plate!, scale: 0.85),
+                                )
+                              : const Text("بدون پلاک", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                                onPressed: () => _showCarDialog(car: car),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('تایید حذف'),
+                                      content: Text('آیا از حذف "${car.name}" اطمینان دارید؟'),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                        TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                                      ],
+                                    ),
+                                  );
 
-                                if (confirm == true) {
-                                  await DatabaseHelper.instance.delete('cars', car.id);
-                                  _refreshCars();
-                                }
-                              },
-                            ),
-                          ],
+                                  if (confirm == true) {
+                                    await DatabaseHelper.instance.delete('cars', car.id);
+                                    _refreshCars();
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );

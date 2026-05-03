@@ -7,18 +7,18 @@ import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_service.dart';
 import '../../models/models.dart';
 import 'add_payment_screen.dart';
-import 'bulk_collection_screen.dart';
+import 'bulk_logistics_settlement_screen.dart';
 import 'service_details_screen.dart';
 
-class CustomerLedgerScreen extends StatefulWidget {
-  final Customer customer;
-  const CustomerLedgerScreen({super.key, required this.customer});
+class LogisticsLedgerScreen extends StatefulWidget {
+  final LogisticsCo logisticsCo;
+  const LogisticsLedgerScreen({super.key, required this.logisticsCo});
 
   @override
-  State<CustomerLedgerScreen> createState() => _CustomerLedgerScreenState();
+  State<LogisticsLedgerScreen> createState() => _LogisticsLedgerScreenState();
 }
 
-class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with SingleTickerProviderStateMixin {
+class _LogisticsLedgerScreenState extends State<LogisticsLedgerScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<LoadService> _services = [];
   List<Payment> _generalPayments = [];
@@ -43,25 +43,25 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
     final allPayments = await DatabaseHelper.instance.getAllPayments();
     
     setState(() {
-      _services = allServices.where((s) => s.customer?.id == widget.customer.id).toList();
+      _services = allServices.where((s) => s.logisticsCo?.id == widget.logisticsCo.id).toList();
       
-      final customerServiceIds = _services.map((s) => s.id).toSet();
-      
+      final logisticsServiceIds = _services.map((s) => s.id).toSet();
       final filteredPayments = allPayments.where((p) => 
-        p.type == PaymentType.fromCustomer && (
-          p.customerId == widget.customer.id || 
-          (p.serviceId != null && customerServiceIds.contains(p.serviceId))
+        p.type == PaymentType.toLogistics && (
+          p.logisticsId == widget.logisticsCo.id || 
+          (p.serviceId != null && logisticsServiceIds.contains(p.serviceId))
         )
       ).toList();
 
       final Map<String, Payment> uniquePayments = {};
       for (var p in filteredPayments) {
-        if (p.id != null) uniquePayments[p.id!] = p;
+        if (p.id != null) {
+          uniquePayments[p.id!] = p;
+        }
       }
       
       _generalPayments = uniquePayments.values.toList();
       _generalPayments.sort((a, b) => b.date.compareTo(a.date));
-      
       _isLoading = false;
     });
   }
@@ -113,21 +113,21 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
 
   @override
   Widget build(BuildContext context) {
-    double totalDebt = _services.fold(0, (sum, s) => sum + s.totalServicePriceForCustomer);
+    double totalDebt = _services.fold(0, (sum, s) => sum + s.expenses.owedToLogistics);
     double totalPaid = _generalPayments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
     double pendingChecks = _generalPayments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
     double balance = totalDebt - totalPaid - pendingChecks;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("صورت‌حساب: ${widget.customer.fullName}"),
+        title: Text("صورت‌حساب باربری: ${widget.logisticsCo.name}"),
         actions: [
-          if (widget.customer.accountNumber != null && widget.customer.accountNumber!.isNotEmpty)
+          if (widget.logisticsCo.accountNumber != null && widget.logisticsCo.accountNumber!.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.copy_all_outlined),
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: widget.customer.accountNumber!));
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("شماره حساب مشتری کپی شد")));
+                Clipboard.setData(ClipboardData(text: widget.logisticsCo.accountNumber!));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("شماره حساب باربری کپی شد")));
               },
               tooltip: 'کپی شماره حساب',
             ),
@@ -136,23 +136,23 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
             onPressed: () async {
               final result = await Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => BulkCollectionScreen(initialCustomer: widget.customer))
+                MaterialPageRoute(builder: (context) => BulkLogisticsSettlementScreen(initialLogisticsCo: widget.logisticsCo))
               );
               if (result == true) _loadData();
             },
-            tooltip: 'دریافت گروهی',
+            tooltip: 'تسویه گروهی',
           ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
-            onPressed: () => PdfService.generateAndPrintCustomerLedger(widget.customer, _services, _generalPayments),
+            onPressed: () => PdfService.generateAndPrintLogisticsLedger(widget.logisticsCo, _services, _generalPayments),
             tooltip: 'خروجی PDF',
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: "سرویس‌ها (طلب ما)", icon: Icon(Icons.history_outlined)),
-            Tab(text: "دریافتی‌های ما", icon: Icon(Icons.price_check_outlined)),
+            Tab(text: "سرویس‌ها (بدهی ما)", icon: Icon(Icons.history_outlined)),
+            Tab(text: "پرداختی‌های ما", icon: Icon(Icons.payments_outlined)),
           ],
         ),
       ),
@@ -191,35 +191,42 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   date: DateTime.now(), 
                   weight: 0, 
                   transportPricePerTon: 0, 
-                  expenses: ServiceExpenses(),
-                  customer: widget.customer,
+                  expenses: ServiceExpenses()
                 ),
-                isCollection: true,
-                customCustomerId: widget.customer.id,
+                isCollection: false,
+                customLogisticsId: widget.logisticsCo.id,
               ),
             ),
           );
           if (result == true) _loadData();
         },
-        label: const Text("ثبت دریافتی جدید"),
+        label: const Text("ثبت پرداختی جدید"),
         icon: const Icon(Icons.add_card),
-        backgroundColor: Colors.blue.shade800,
+        backgroundColor: Colors.orange.shade800,
       ),
     );
   }
 
   Widget _buildBalanceHeader(double debt, double paid, double checks, double balance) {
-    String statusLabel = "مانده طلب نهایی ما:";
-    if (balance <= 0) statusLabel = "تسویه شده / بستانکار:";
+    String statusLabel = "مانده بدهی نهایی ما:";
+    if (balance <= 0) {
+      statusLabel = "تسویه شده / بستانکار:";
+    }
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
       child: Card(
-        color: balance > 0 ? Colors.blue.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
+        color: balance > 0 ? Colors.orange.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: balance > 0 ? Colors.blue.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12), 
+          side: BorderSide(color: balance > 0 ? Colors.orange.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -230,7 +237,11 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   Text(statusLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(
                     "${AppFormatters.formatCurrency(balance.abs())} تومان",
-                    style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.blue.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), fontSize: 18),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      color: balance > 0 ? Colors.orange.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), 
+                      fontSize: 18
+                    ),
                   ),
                 ],
               ),
@@ -239,11 +250,11 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _headerInfoItem("کل فاکتورها", debt, Colors.black87),
+                    _headerInfoItem("کل هزینه بارنامه", debt, Colors.black87),
                     const VerticalDivider(),
-                    _headerInfoItem("وصول شده", paid, Colors.green.shade700),
+                    _headerInfoItem("پرداخت شده", paid, Colors.green.shade700),
                     const VerticalDivider(),
-                    _headerInfoItem("چک در جریان", checks, Colors.orange.shade800),
+                    _headerInfoItem("چک معلق", checks, Colors.orange.shade800),
                   ],
                 ),
               ),
@@ -300,19 +311,39 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         onTap: () async {
-          await Navigator.push(context, MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: s)));
-          _loadData();
+          final result = await Navigator.push(
+            context, 
+            MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: s))
+          );
+          if (result == true || result == null) _loadData();
         },
         title: Text("${s.loadType.name} - ${s.weight.toString().toPersianDigit()} تن", style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Row(children: [const Icon(Icons.calendar_today, size: 12, color: Colors.grey), const SizedBox(width: 4), Text(s.date.toPersianDate(), style: const TextStyle(fontSize: 11))]),
-            if (s.orderCode.isNotEmpty) Text("کد سفارش: ${s.orderCode.toPersianDigit()}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(s.date.toPersianDate(), style: const TextStyle(fontSize: 11)),
+              ],
+            ),
+            if (s.orderCode.isNotEmpty)
+              Text("کد سفارش: ${s.orderCode.toPersianDigit()}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
           ],
         ),
-        trailing: Text(AppFormatters.formatCurrency(s.totalServicePriceForCustomer), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              AppFormatters.formatCurrency(s.expenses.owedToLogistics),
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+            const Text("بارنامه + کمیسیون", style: TextStyle(fontSize: 9, color: Colors.grey)),
+          ],
+        ),
       ),
     );
   }
@@ -326,14 +357,21 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
     if (isPendingCheck && p.checkDueDate != null) {
       daysLeft = p.checkDueDate!.difference(DateTime.now()).inDays;
       progress = 1.0 - (daysLeft / 15.0).clamp(0.0, 1.0);
-      if (daysLeft <= 3) progressBarColor = Colors.red;
-      else if (daysLeft <= 7) progressBarColor = Colors.orange;
+      
+      if (daysLeft <= 3) {
+        progressBarColor = Colors.red;
+      } else if (daysLeft <= 7) {
+        progressBarColor = Colors.orange;
+      }
     }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       color: isPendingCheck ? Colors.orange.shade50.withOpacity(0.5) : Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isPendingCheck ? progressBarColor.withOpacity(0.3) : Colors.grey.shade100)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isPendingCheck ? progressBarColor.withOpacity(0.3) : Colors.grey.shade100),
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
@@ -342,14 +380,18 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
               onLongPress: () => _showPaymentOptions(p),
               leading: CircleAvatar(
                 backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.green.shade100,
-                child: Icon(p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, color: isPendingCheck ? progressBarColor : Colors.green),
+                child: Icon(
+                  p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, 
+                  color: isPendingCheck ? progressBarColor : Colors.green
+                ),
               ),
               title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("${p.date.toPersianDate()} ${p.description ?? ''}"),
-                  if (p.method == PaymentMethod.check) Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  if (p.method == PaymentMethod.check)
+                    Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
               trailing: Row(
@@ -358,7 +400,14 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
                   if (p.receiptImagePath != null || p.checkImagePath != null)
                     IconButton(icon: const Icon(Icons.image_outlined, color: Colors.blueGrey), onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!)),
                   if (isPendingCheck)
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: progressBarColor, borderRadius: BorderRadius.circular(12)), child: Text(daysLeft <= 0 ? "امروز" : "$daysLeft روز", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: progressBarColor, borderRadius: BorderRadius.circular(12)),
+                      child: Text(
+                        daysLeft <= 0 ? "امروز" : "$daysLeft روز", 
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+                      ),
+                    )
                   else
                     const Icon(Icons.check_circle, color: Colors.green, size: 24),
                 ],
@@ -367,7 +416,20 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
             if (isPendingCheck)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: progress, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(progressBarColor), minHeight: 6)),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
+                        minHeight: 6,
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),
@@ -383,8 +445,22 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
           mainAxisSize: MainAxisSize.min,
           children: [
             if (p.method == PaymentMethod.check)
-              ListTile(leading: Icon(p.isCleared ? Icons.history : Icons.check_circle, color: Colors.blue), title: Text(p.isCleared ? "تغییر وضعیت به در جریان" : "تایید وصول چک"), onTap: () { Navigator.pop(context); _toggleCheckStatus(p); }),
-            ListTile(leading: const Icon(Icons.delete_forever, color: Colors.red), title: const Text("حذف کامل این تراکنش"), onTap: () { Navigator.pop(context); _showDeleteConfirm(p); }),
+              ListTile(
+                leading: Icon(p.isCleared ? Icons.history : Icons.check_circle, color: Colors.blue),
+                title: Text(p.isCleared ? "تغییر وضعیت به در جریان" : "تایید وصول چک"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleCheckStatus(p);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text("حذف کامل این تراکنش"),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteConfirm(p);
+              },
+            ),
           ],
         ),
       ),
@@ -396,10 +472,17 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("حذف تراکنش"),
-        content: const Text("آیا از حذف دائمی این تراکنش اطمینان دارید؟"),
+        content: const Text("آیا از حذف دائمی این تراکنش اطمینان دارید؟ این عمل قابل بازگشت نیست."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("انصراف")),
-          ElevatedButton(onPressed: () { Navigator.pop(context); if (p.id != null) _deletePayment(p.id!); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text("حذف")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (p.id != null) _deletePayment(p.id!);
+            }, 
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("حذف نهایی")
+          ),
         ],
       ),
     );

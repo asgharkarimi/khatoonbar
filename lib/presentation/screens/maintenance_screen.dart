@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/data/service_repository.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
@@ -33,6 +36,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
       if (!mounted) return;
       setState(() {
         _maintenances = m;
+        _maintenances.sort((a, b) => b.date.compareTo(a.date));
         _cars = c;
         _isLoading = false;
       });
@@ -47,13 +51,17 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     final costController = TextEditingController();
     final kmController = TextEditingController();
     final nextKmController = TextEditingController();
+    final descriptionController = TextEditingController();
+    DateTime selectedDate = DateTime.now();
+    DateTime? nextDate;
     Car? selectedCar = _cars.isNotEmpty ? _cars.first : null;
+    String? imagePath;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('ثبت سرویس دوره‌ای'),
+          title: const Text('ثبت سرویس دوره‌ای (نت)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Form(
               key: _formKey,
@@ -93,6 +101,52 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'کیلومتر سرویس بعدی (اختیاری)', border: OutlineInputBorder()),
                   ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                    title: const Text('موعد زمانی بعدی (اختیاری)', style: TextStyle(fontSize: 12)),
+                    subtitle: Text(nextDate == null ? 'انتخاب نشده' : nextDate!.toPersianDate()),
+                    trailing: const Icon(Icons.calendar_month, size: 20),
+                    onTap: () async {
+                      final picked = await showPersianDatePicker(
+                        context: context,
+                        initialDate: Jalali.now(),
+                        firstDate: Jalali.now(),
+                        lastDate: Jalali(1450),
+                      );
+                      if (picked != null) setDialogState(() => nextDate = picked.toDateTime());
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(source: ImageSource.gallery);
+                      if (picked != null) setDialogState(() => imagePath = picked.path);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey.shade50,
+                      ),
+                      child: imagePath == null 
+                        ? const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined, color: Colors.grey),
+                              Text('افزودن تصویر فاکتور/رسید', style: TextStyle(color: Colors.grey, fontSize: 10)),
+                            ],
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(File(imagePath!), fit: BoxFit.cover),
+                          ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -106,10 +160,12 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     carId: selectedCar!.id,
                     type: typeController.text,
-                    date: DateTime.now(),
+                    date: selectedDate,
                     cost: double.tryParse(costController.text) ?? 0,
                     currentKm: int.tryParse(kmController.text),
                     nextKm: int.tryParse(nextKmController.text),
+                    nextDate: nextDate,
+                    receiptImagePath: imagePath,
                   );
 
                   await _repository.saveMaintenance(m);
@@ -124,6 +180,43 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
             ),
           ],
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(Maintenance m) async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف سرویس'),
+        content: Text('آیا از حذف سرویس "${m.type}" اطمینان دارید؟'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('حذف نهایی')
+          ),
+        ],
+      ),
+    );
+    if (res == true) {
+      await _repository.deleteMaintenance(m.id);
+      _loadData();
+    }
+  }
+
+  void _showImageDialog(String path) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(title: const Text('تصویر رسید سرویس'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
+            Flexible(child: SingleChildScrollView(child: Image.file(File(path), fit: BoxFit.contain))),
+          ],
         ),
       ),
     );
@@ -156,22 +249,42 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ListTile(
+                        onLongPress: () => _confirmDelete(m),
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
                           child: const Icon(Icons.build_circle_outlined, color: Colors.blue),
                         ),
                         title: Text("${m.type} - ${car.name}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("تاریخ: ${m.date.toPersianDate()}\nهزینه: ${AppFormatters.formatCurrency(m.cost)} تومان"),
-                        trailing: m.nextKm != null 
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text('سرویس بعدی', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                Text("${m.nextKm}".toPersianDigit(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                              ],
-                            )
-                          : null,
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("تاریخ: ${m.date.toPersianDate()}"),
+                            Text("هزینه: ${AppFormatters.formatCurrency(m.cost)} تومان"),
+                            if (m.currentKm != null) Text("کیلومتر: ${m.currentKm.toString().toPersianDigit()}"),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (m.receiptImagePath != null)
+                              IconButton(
+                                icon: const Icon(Icons.receipt_long, color: Colors.blue),
+                                onPressed: () => _showImageDialog(m.receiptImagePath!),
+                              ),
+                            if (m.nextKm != null || m.nextDate != null)
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('سرویس بعدی', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                                  if (m.nextKm != null)
+                                    Text("${m.nextKm}".toPersianDigit(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 11)),
+                                  if (m.nextDate != null)
+                                    Text(m.nextDate!.toPersianDate(), style: const TextStyle(fontSize: 10, color: Colors.red)),
+                                ],
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   },

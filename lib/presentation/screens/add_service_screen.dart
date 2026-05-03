@@ -25,6 +25,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   List<Seller> _sellers = [];
   List<Customer> _customers = [];
   List<LogisticsCo> _logisticsCos = [];
+  List<BankAccount> _bankAccounts = [];
 
   Driver? _selectedDriver;
   Car? _selectedCar;
@@ -32,6 +33,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   Seller? _selectedSeller;
   Customer? _selectedCustomer;
   LogisticsCo? _selectedLogisticsCo;
+  BankAccount? _selectedBankAccount;
 
   final TextEditingController _originController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
@@ -49,6 +51,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   double _loadingTip = 0;
   double _unloadingTip = 0;
   double _billOfLading = 0;
+  double _commission = 0;
   
   List<OtherExpense> _otherExpenses = [];
 
@@ -101,6 +104,12 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _accountOwnerController.text = s.fareAccountOwner ?? "";
       _bankNameController.text = s.fareBankName ?? "";
 
+      try {
+        _selectedBankAccount = _bankAccounts.firstWhere((a) => a.accountNumber == s.fareAccountNumber && a.bankName == s.fareBankName);
+      } catch (_) {
+        _selectedBankAccount = null;
+      }
+
       _weight = s.weight;
       _transportPricePerTon = s.transportPricePerTon;
       _purchasePricePerTon = s.purchasePricePerTon;
@@ -111,6 +120,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _loadingTip = s.expenses.loadingTip;
       _unloadingTip = s.expenses.unloadingTip;
       _billOfLading = s.expenses.billOfLadingCost;
+      _commission = s.expenses.commission;
       _otherExpenses = List.from(s.expenses.otherExpenses);
     });
   }
@@ -123,6 +133,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       final sellers = await _repository.getSellers();
       final customers = await _repository.getCustomers();
       final logistics = await _repository.getLogisticsCos();
+      final bankAccounts = await _repository.getBankAccounts();
 
       setState(() {
         _drivers = drivers;
@@ -131,6 +142,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
         _sellers = sellers;
         _customers = customers;
         _logisticsCos = logistics;
+        _bankAccounts = bankAccounts;
         _isLoading = false;
       });
     } catch (e) {
@@ -141,45 +153,48 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     }
   }
 
+  Future<void> _pickInvoiceImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() => _purchaseInvoiceImagePath = picked.path);
+    }
+  }
+
   void _addOtherExpense() {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
-    String? imagePath;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('افزودن هزینه جانبی'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: titleController, decoration: const InputDecoration(labelText: 'عنوان هزینه (اجباری)')),
-              const SizedBox(height: 12),
-              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ (تومان) - اجباری')),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-            ElevatedButton(
-              onPressed: () {
-                if (titleController.text.isEmpty || amountController.text.isEmpty) {
-                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً تمامی فیلدها را پر کنید')));
-                   return;
-                }
-                setState(() {
-                  _otherExpenses.add(OtherExpense(
-                    title: titleController.text,
-                    amount: double.tryParse(amountController.text) ?? 0,
-                    receiptImagePath: imagePath,
-                  ));
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('افزودن'),
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text('افزودن هزینه جانبی'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: titleController, decoration: const InputDecoration(labelText: 'عنوان هزینه (اجباری)')),
+            const SizedBox(height: 12),
+            TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ (تومان) - اجباری')),
           ],
         ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+          ElevatedButton(
+            onPressed: () {
+              if (titleController.text.isEmpty || amountController.text.isEmpty) {
+                 return;
+              }
+              setState(() {
+                _otherExpenses.add(OtherExpense(
+                  title: titleController.text,
+                  amount: double.tryParse(amountController.text) ?? 0,
+                ));
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('افزودن'),
+          ),
+        ],
       ),
     );
   }
@@ -201,14 +216,10 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() {
             _selectedLogisticsCo = _logisticsCos.firstWhere((l) => l.id == newCo.id);
-            _logisticsNameController.text = newCo.name;
-            _logisticsPhoneController.text = newCo.phone;
           });
           return true;
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام باربری را وارد کنید')));
-          return false;
         }
+        return false;
       },
     );
   }
@@ -234,10 +245,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() => _selectedDriver = _drivers.firstWhere((d) => d.id == newDriver.id));
           return true;
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام راننده را وارد کنید')));
-          return false;
         }
+        return false;
       },
     );
   }
@@ -259,10 +268,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() => _selectedCar = _cars.firstWhere((c) => c.id == newCar.id));
           return true;
-        } else {
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام خودرو را وارد کنید')));
-           return false;
         }
+        return false;
       },
     );
   }
@@ -291,10 +298,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() => _selectedCustomer = _customers.firstWhere((c) => c.id == newCustomer.id));
           return true;
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام مشتری را وارد کنید')));
-          return false;
         }
+        return false;
       },
     );
   }
@@ -316,10 +321,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() => _selectedSeller = _sellers.firstWhere((s) => s.id == newSeller.id));
           return true;
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام فروشنده را وارد کنید')));
-          return false;
         }
+        return false;
       },
     );
   }
@@ -338,10 +341,45 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           await _loadInitialData();
           setState(() => _selectedLoadType = _loadTypes.firstWhere((lt) => lt.id == newType.id));
           return true;
-        } else {
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً نام بار را وارد کنید')));
-           return false;
         }
+        return false;
+      },
+    );
+  }
+
+  void _showAddBankAccountDialog() {
+    final bankNameController = TextEditingController();
+    final accountController = TextEditingController();
+    final ownerController = TextEditingController();
+    _showStyledDialog(
+      title: 'حساب بانکی جدید',
+      children: [
+        _buildTextField(controller: bankNameController, label: 'نام بانک (اجباری)', icon: Icons.account_balance, isRequired: true),
+        const SizedBox(height: 12),
+        _buildTextField(controller: accountController, label: 'شماره حساب/کارت', icon: Icons.credit_card, keyboardType: TextInputType.number, isRequired: true),
+        const SizedBox(height: 12),
+        _buildTextField(controller: ownerController, label: 'نام صاحب حساب', icon: Icons.person_outline),
+      ],
+      onConfirm: () async {
+        if (bankNameController.text.isNotEmpty && accountController.text.isNotEmpty) {
+          final newAcc = BankAccount(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            bankName: bankNameController.text.trim(),
+            accountNumber: accountController.text.trim(),
+            accountOwner: ownerController.text.trim(),
+            initialBalance: 0,
+          );
+          await _repository.saveBankAccount(newAcc);
+          await _loadInitialData();
+          setState(() {
+            _selectedBankAccount = _bankAccounts.firstWhere((a) => a.id == newAcc.id);
+            _bankNameController.text = _selectedBankAccount!.bankName;
+            _accountNumberController.text = _selectedBankAccount!.accountNumber;
+            _accountOwnerController.text = _selectedBankAccount!.accountOwner;
+          });
+          return true;
+        }
+        return false;
       },
     );
   }
@@ -366,11 +404,11 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     final theme = Theme.of(context);
     double totalTransport = _weight * _transportPricePerTon;
     double totalPurchase = _weight * _purchasePricePerTon;
-    double expenses = _fuel + _toll + _loadingTip + _unloadingTip + _billOfLading + _otherExpenses.fold(0, (sum, item) => sum + item.amount);
-    double profit = totalTransport - expenses;
+    double expensesTotal = _fuel + _toll + _loadingTip + _unloadingTip + _billOfLading + _commission + _otherExpenses.fold(0, (sum, item) => sum + item.amount);
+    double profit = totalTransport - expensesTotal;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF9FAFB),
+      backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(title: Text(widget.serviceToEdit == null ? 'ثبت سرویس جدید' : 'ویرایش سرویس')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -423,6 +461,18 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         AmountInput(label: 'قیمت هر تن حمل', initialValue: _transportPricePerTon, onChanged: (v) => setState(() => _transportPricePerTon = v)),
                         const SizedBox(height: 12),
                         AmountInput(label: 'قیمت هر تن خرید (اختیاری)', initialValue: _purchasePricePerTon, onChanged: (v) => setState(() => _purchasePricePerTon = v)),
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: _pickInvoiceImage,
+                          icon: const Icon(Icons.add_a_photo_outlined),
+                          label: Text(_purchaseInvoiceImagePath == null ? 'افزودن تصویر فاکتور خرید' : 'تصویر فاکتور انتخاب شد'),
+                          style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+                        ),
+                        if (_purchaseInvoiceImagePath != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Image.file(File(_purchaseInvoiceImagePath!), height: 100, fit: BoxFit.cover),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -431,6 +481,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       icon: Icons.receipt_long_outlined,
                       children: [
                         AmountInput(label: 'هزینه بارنامه (اجباری)', initialValue: _billOfLading, onChanged: (v) => setState(() => _billOfLading = v)),
+                        const SizedBox(height: 12),
+                        AmountInput(label: 'کمیسیون باربری (اختیاری)', initialValue: _commission, onChanged: (v) => setState(() => _commission = v)),
                         const SizedBox(height: 12),
                         Row(children: [
                           Expanded(child: AmountInput(label: 'سوخت', initialValue: _fuel, onChanged: (v) => setState(() => _fuel = v))),
@@ -456,8 +508,40 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         )),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    _buildStepCard(
+                      title: 'اطلاعات واریز کرایه',
+                      icon: Icons.account_balance_outlined,
+                      children: [
+                        _buildDropdownField<BankAccount>(
+                          label: 'انتخاب حساب ذخیره شده',
+                          icon: Icons.account_balance_wallet_outlined,
+                          value: _selectedBankAccount,
+                          items: _bankAccounts,
+                          onChanged: (v) {
+                            setState(() {
+                              _selectedBankAccount = v;
+                              if (v != null) {
+                                _bankNameController.text = v.bankName;
+                                _accountNumberController.text = v.accountNumber;
+                                _accountOwnerController.text = v.accountOwner;
+                              }
+                            });
+                          },
+                          itemLabel: (a) => "${a.bankName} - ${a.accountOwner}",
+                          onAddPressed: _showAddBankAccountDialog,
+                          isRequired: false,
+                        ),
+                        const Divider(height: 32),
+                        _buildTextField(controller: _bankNameController, label: 'نام بانک', icon: Icons.account_balance),
+                        const SizedBox(height: 12),
+                        _buildTextField(controller: _accountNumberController, label: 'شماره حساب/کارت', icon: Icons.credit_card, keyboardType: TextInputType.number),
+                        const SizedBox(height: 12),
+                        _buildTextField(controller: _accountOwnerController, label: 'نام صاحب حساب', icon: Icons.person_outline),
+                      ],
+                    ),
                     const SizedBox(height: 24),
-                    _buildSummaryCard(totalTransport, totalPurchase, expenses, profit, theme),
+                    _buildSummaryCard(totalTransport, totalPurchase, expensesTotal, profit, theme),
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -536,7 +620,16 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildDropdownField<T>({required String label, required IconData icon, required T? value, required List<T> items, required void Function(T?) onChanged, required String Function(T) itemLabel, VoidCallback? onAddPressed}) {
+  Widget _buildDropdownField<T>({
+    required String label, 
+    required IconData icon, 
+    required T? value, 
+    required List<T> items, 
+    required void Function(T?) onChanged, 
+    required String Function(T) itemLabel, 
+    VoidCallback? onAddPressed,
+    bool isRequired = true,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -544,7 +637,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
           Expanded(
             child: DropdownButtonFormField<T>(
               value: value,
-              validator: (v) => v == null ? 'لطفاً یک مورد را انتخاب کنید' : null,
+              validator: isRequired ? (v) => v == null ? 'لطفاً یک مورد را انتخاب کنید' : null : null,
               decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, size: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
               items: items.map((i) => DropdownMenuItem(value: i, child: Text(itemLabel(i)))).toList(),
               onChanged: (v) => setState(() => onChanged(v)),
@@ -561,19 +654,46 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
   Future<void> _saveService() async {
     if (!_formKey.currentState!.validate() || _billOfLading == 0) {
-      if (_billOfLading == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ بارنامه را وارد کنید')));
-      }
       return;
     }
 
     if (_selectedDriver == null || _selectedCar == null || _selectedSeller == null || _selectedLoadType == null) {
-       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفا تمامی موارد ضروری را انتخاب کنید')));
        return;
     }
 
-    final expenses = ServiceExpenses(fuelCost: _fuel, tollCost: _toll, loadingTip: _loadingTip, unloadingTip: _unloadingTip, billOfLadingCost: _billOfLading, commission: 0, otherExpenses: _otherExpenses);
-    final newService = LoadService(id: widget.serviceToEdit?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), orderCode: _orderCodeController.text, car: _selectedCar!, driver: _selectedDriver!, loadType: _selectedLoadType!, seller: _selectedSeller!, customer: _selectedCustomer, logisticsCo: _selectedLogisticsCo, origin: _originController.text, destination: _destinationController.text, date: widget.serviceToEdit?.date ?? DateTime.now(), weight: _weight, transportPricePerTon: _transportPricePerTon, purchasePricePerTon: _purchasePricePerTon, expenses: expenses, purchaseInvoiceImagePath: _purchaseInvoiceImagePath);
+    final expenses = ServiceExpenses(
+      fuelCost: _fuel, 
+      tollCost: _toll, 
+      loadingTip: _loadingTip, 
+      unloadingTip: _unloadingTip, 
+      billOfLadingCost: _billOfLading, 
+      commission: _commission, 
+      otherExpenses: _otherExpenses
+    );
+    
+    final newService = LoadService(
+      id: widget.serviceToEdit?.id ?? DateTime.now().millisecondsSinceEpoch.toString(), 
+      orderCode: _orderCodeController.text, 
+      car: _selectedCar!, 
+      driver: _selectedDriver!, 
+      loadType: _selectedLoadType!, 
+      seller: _selectedSeller!, 
+      customer: _selectedCustomer, 
+      logisticsCo: _selectedLogisticsCo, 
+      origin: _originController.text, 
+      destination: _destinationController.text, 
+      date: widget.serviceToEdit?.date ?? DateTime.now(), 
+      weight: _weight, 
+      transportPricePerTon: _transportPricePerTon, 
+      purchasePricePerTon: _purchasePricePerTon, 
+      expenses: expenses, 
+      purchaseInvoiceImagePath: _purchaseInvoiceImagePath,
+      fareAccountNumber: _accountNumberController.text,
+      fareAccountOwner: _accountOwnerController.text,
+      fareBankName: _bankNameController.text,
+      logisticsName: _logisticsNameController.text,
+      logisticsPhone: _logisticsPhoneController.text,
+    );
 
     try {
       await _repository.saveService(newService);

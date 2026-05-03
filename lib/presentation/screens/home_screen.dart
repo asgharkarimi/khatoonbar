@@ -6,6 +6,8 @@ import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import 'add_service_screen.dart';
 import 'service_details_screen.dart';
+import 'services_screen.dart';
+import 'ledger_hub_screen.dart';
 
 enum HomeServiceFilter { all, today, week, month }
 
@@ -24,6 +26,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   HomeServiceFilter _activeFilter = HomeServiceFilter.all;
 
+  double _totalCustomerDebt = 0;
+  double _totalSellerDebt = 0;
+  double _totalLogisticsDebt = 0;
+  double _cashBalance = 0;
+
   @override
   void initState() {
     super.initState();
@@ -31,22 +38,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
     try {
       final services = await _repository.getAllServices();
       final allPayments = await _repository.getPayments();
       
+      _totalCustomerDebt = await _repository.getTotalUnpaidCustomerDebts();
+      _totalSellerDebt = await _repository.getTotalUnpaidSellerDebts();
+      _totalLogisticsDebt = await _repository.getTotalUnpaidLogisticsDebts();
+      _cashBalance = await _repository.getCurrentCashBalance();
+
       final now = DateTime.now();
       final upcoming = allPayments.where((p) {
         if (p.method == PaymentMethod.check && !p.isCleared && p.checkDueDate != null) {
           final difference = p.checkDueDate!.difference(now).inDays;
-          return difference <= 15; // چک‌های ۱۵ روز آینده برای نمایش نوار پیشرفت
+          return difference <= 15;
         }
         return false;
       }).toList();
 
       upcoming.sort((a, b) => a.checkDueDate!.compareTo(b.checkDueDate!));
 
+      if (!mounted) return;
       setState(() {
         _allServices = services;
         _upcomingChecks = upcoming;
@@ -54,12 +68,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('خطا در بارگذاری داده‌ها: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطا در بارگذاری داده‌ها: $e')),
+      );
     }
   }
 
@@ -99,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
         serviceId: payment.serviceId,
         sellerId: payment.sellerId,
         customerId: payment.customerId,
+        logisticsId: payment.logisticsId,
         type: payment.type,
         method: payment.method,
         amount: payment.amount,
@@ -131,12 +145,11 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 20),
-              // با استفاده از ClipRect و Align، لبه‌های تصویر را کمی برش می‌دهیم تا نقاط سیاه حذف شوند
               child: ClipRect(
                 child: Align(
                   alignment: Alignment.center,
-                  widthFactor: 0.85, // برش ۱۰ درصد از عرض
-                  heightFactor: 0.85, // برش ۱۰ درصد از ارتفاع
+                  widthFactor: 0.85,
+                  heightFactor: 0.85,
                   child: Image.asset(
                     'assets/images/khatoon_logo.png',
                     height: 36,
@@ -175,8 +188,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         TextButton(
-                          onPressed: _loadData,
-                          child: const Text('به‌روزرسانی', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (context) => const ServicesScreen()));
+                          },
+                          child: const Text('مشاهده همه', style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
@@ -184,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
                     if (_filteredServices.isEmpty) 
                       _buildEmptyState(theme)
-                    else
+                    else ...[
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -194,6 +209,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           return _buildServiceCard(service, theme);
                         },
                       ),
+                      if (_filteredServices.length > 10)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(builder: (context) => const ServicesScreen()));
+                              },
+                              child: const Text('مشاهده لیست کامل سرویس‌ها'),
+                            ),
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 80),
                   ],
                 ),
               ),
@@ -271,7 +301,6 @@ class _HomeScreenState extends State<HomeScreen> {
               final now = DateTime.now();
               final difference = check.checkDueDate!.difference(now).inDays;
               
-              // محاسبات نوار پیشرفت (فرض بر این است که از ۱۵ روز قبل نوار شروع به پر شدن می‌کند)
               double progress = 1.0 - (difference / 15.0).clamp(0.0, 1.0);
               
               Color progressBarColor = Colors.green;
@@ -281,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 progressBarColor = Colors.orange;
               }
 
-              String typeLabel = check.type == PaymentType.toSeller ? "پرداختی به فروشنده" : "دریافتی از مشتری";
+              String typeLabel = "چک ${check.type == PaymentType.toSeller ? "پرداختی" : (check.type == PaymentType.fromCustomer ? "دریافتی" : "باربری")}";
 
               return Container(
                 width: 260,
@@ -323,7 +352,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 8),
-                    // نوار پیشرفت افقی
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
@@ -362,46 +390,67 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSummaryCard(ThemeData theme) {
-    double totalCustomerDebt = _allServices.fold(0, (sum, s) => sum + s.remainingCustomerDebt);
-    double totalSellerDebt = _allServices.fold(0, (sum, s) => sum + s.remainingDebtToSeller);
-    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
         children: [
-          _buildSummaryRow('طلب از مشتریان', totalCustomerDebt, Colors.blue.shade800, theme),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _summaryItem('موجودی صندوق', _cashBalance, Colors.green.shade800, theme, null),
+              _summaryItem('طلب از بازار', _totalCustomerDebt, Colors.blue.shade800, theme, 0),
+            ],
+          ),
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+            padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(height: 1, color: Color(0xFFF2F4F7)),
           ),
-          _buildSummaryRow('بدهی به فروشندگان', totalSellerDebt, Colors.red.shade800, theme),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _summaryItem('بدهی فروشندگان', _totalSellerDebt, Colors.red.shade800, theme, 1),
+              _summaryItem('بدهی باربری‌ها', _totalLogisticsDebt, Colors.orange.shade800, theme, 2),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryRow(String label, double amount, Color color, ThemeData theme) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: theme.textTheme.bodySmall),
-        Text(
-          "${AppFormatters.formatCurrency(amount)} تومان",
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+  Widget _summaryItem(String label, double amount, Color color, ThemeData theme, int? tabIndex) {
+    return InkWell(
+      onTap: tabIndex != null ? () async {
+        await Navigator.push(context, MaterialPageRoute(builder: (context) => LedgerHubScreen(initialTab: tabIndex)));
+        _loadData();
+      } : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600)),
+            const SizedBox(height: 4),
+            Text(
+              AppFormatters.formatCurrency(amount),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+                fontSize: 15,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 

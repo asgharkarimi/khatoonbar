@@ -22,7 +22,9 @@ dependencies:
   path_provider: ^2.1.1
   persian_datetime_picker: ^3.2.0
   image_picker: ^1.0.4
-  flutter_local_notifications: ^17.1.2 # اضافه شد
+  flutter_local_notifications: ^17.1.2
+  share_plus: ^10.1.4
+  file_picker: ^8.1.7
 
 dev_dependencies:
   flutter_test:

@@ -6,26 +6,26 @@ import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import '../widgets/amount_input.dart';
 
-class BulkSettlementScreen extends StatefulWidget {
-  final Seller? initialSeller;
-  const BulkSettlementScreen({super.key, this.initialSeller});
+class BulkCollectionScreen extends StatefulWidget {
+  final Customer? initialCustomer;
+  const BulkCollectionScreen({super.key, this.initialCustomer});
 
   @override
-  State<BulkSettlementScreen> createState() => _BulkSettlementScreenState();
+  State<BulkCollectionScreen> createState() => _BulkCollectionScreenState();
 }
 
-class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
+class _BulkCollectionScreenState extends State<BulkCollectionScreen> {
   final ServiceRepository _repository = ServiceRepository();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = true;
 
-  List<Seller> _sellers = [];
-  Seller? _selectedSeller;
+  List<Customer> _customers = [];
+  Customer? _selectedCustomer;
   List<LoadService> _unsettledServices = [];
   final Set<String> _selectedServiceIds = {};
 
   double _paymentAmount = 0;
-  PaymentMethod _selectedMethod = PaymentMethod.check;
+  PaymentMethod _selectedMethod = PaymentMethod.cash;
   final TextEditingController _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   DateTime? _checkDueDate;
@@ -37,26 +37,25 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    final sellers = await _repository.getSellers();
+    final customers = await _repository.getCustomers();
     setState(() {
-      _sellers = sellers;
-      if (widget.initialSeller != null) {
-        _selectedSeller = sellers.firstWhere((s) => s.id == widget.initialSeller!.id, orElse: () => widget.initialSeller!);
+      _customers = customers;
+      if (widget.initialCustomer != null) {
+        _selectedCustomer = customers.firstWhere((c) => c.id == widget.initialCustomer!.id, orElse: () => widget.initialCustomer!);
       }
       _isLoading = false;
     });
-    if (_selectedSeller != null) {
-      _loadUnsettledServices(_selectedSeller!.id);
+    if (_selectedCustomer != null) {
+      _loadUnsettledServices(_selectedCustomer!.id);
     }
   }
 
-  Future<void> _loadUnsettledServices(String sellerId) async {
+  Future<void> _loadUnsettledServices(String customerId) async {
     setState(() => _isLoading = true);
     final allServices = await _repository.getAllServices();
     setState(() {
-      // Filter services that still have a "final balance" (debt minus all payments including pending checks)
       _unsettledServices = allServices
-          .where((s) => s.seller.id == sellerId && s.finalBalanceToSeller > 0)
+          .where((s) => s.customer?.id == customerId && s.finalBalanceCustomerDebt > 0)
           .toList();
       _selectedServiceIds.clear();
       _isLoading = false;
@@ -66,7 +65,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   double get _totalSelectedDebt {
     return _unsettledServices
         .where((s) => _selectedServiceIds.contains(s.id))
-        .fold(0, (sum, s) => sum + s.finalBalanceToSeller);
+        .fold(0, (sum, s) => sum + s.finalBalanceCustomerDebt);
   }
 
   @override
@@ -74,7 +73,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('تسویه گروهی با فروشنده')),
+      appBar: AppBar(title: const Text('دریافت گروهی از مشتری')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -84,25 +83,25 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle('۱. انتخاب فروشنده'),
-                    DropdownButtonFormField<Seller>(
-                      value: _selectedSeller,
+                    _buildSectionTitle('۱. انتخاب مشتری'),
+                    DropdownButtonFormField<Customer>(
+                      value: _selectedCustomer,
                       decoration: InputDecoration(
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        prefixIcon: const Icon(Icons.store),
+                        prefixIcon: const Icon(Icons.person),
                       ),
-                      validator: (v) => v == null ? 'لطفاً فروشنده را انتخاب کنید' : null,
-                      items: _sellers.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
+                      validator: (v) => v == null ? 'لطفاً مشتری را انتخاب کنید' : null,
+                      items: _customers.map((c) => DropdownMenuItem(value: c, child: Text(c.fullName))).toList(),
                       onChanged: (val) {
-                        setState(() => _selectedSeller = val);
+                        setState(() => _selectedCustomer = val);
                         if (val != null) _loadUnsettledServices(val.id);
                       },
                     ),
                     const SizedBox(height: 24),
-                    if (_selectedSeller != null) ...[
+                    if (_selectedCustomer != null) ...[
                       _buildSectionTitle('۲. انتخاب سرویس‌های مورد نظر'),
                       if (_unsettledServices.isEmpty)
-                        const Text('هیچ سرویس تسویه نشده‌ای (با مانده بدهی نهایی) برای این فروشنده یافت نشد.')
+                        const Text('هیچ سرویس تسویه نشده‌ای (با مانده بدهی نهایی) برای این مشتری یافت نشد.')
                       else
                         ListView.builder(
                           shrinkWrap: true,
@@ -115,17 +114,18 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                               margin: const EdgeInsets.only(bottom: 8),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(color: isSelected ? theme.primaryColor : Colors.transparent, width: 2),
+                                side: BorderSide(color: isSelected ? Colors.green : Colors.transparent, width: 2),
                               ),
                               child: CheckboxListTile(
                                 value: isSelected,
+                                activeColor: Colors.green,
                                 title: Text("${service.loadType.name} - ${service.orderCode}"),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text("مانده بدهی نهایی: ${AppFormatters.formatCurrency(service.finalBalanceToSeller)} تومان"),
-                                    if (service.pendingSellerChecks > 0)
-                                      Text("چک در جریان: ${AppFormatters.formatCurrency(service.pendingSellerChecks)} تومان", style: const TextStyle(fontSize: 10, color: Colors.orange)),
+                                    Text("مانده طلب نهایی: ${AppFormatters.formatCurrency(service.finalBalanceCustomerDebt)} تومان"),
+                                    if (service.pendingCustomerChecks > 0)
+                                      Text("چک در جریان: ${AppFormatters.formatCurrency(service.pendingCustomerChecks)} تومان", style: const TextStyle(fontSize: 10, color: Colors.orange)),
                                   ],
                                 ),
                                 onChanged: (val) {
@@ -142,27 +142,27 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                           },
                         ),
                       const SizedBox(height: 24),
-                      _buildSectionTitle('۳. اطلاعات پرداخت'),
+                      _buildSectionTitle('۳. اطلاعات دریافتی'),
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.05),
+                          color: Colors.green.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          "جمع بدهی انتخاب شده: ${AppFormatters.formatCurrency(_totalSelectedDebt)} تومان",
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                          "جمع طلب انتخاب شده: ${AppFormatters.formatCurrency(_totalSelectedDebt)} تومان",
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                         ),
                       ),
                       const SizedBox(height: 16),
                       AmountInput(
-                        label: 'مبلغ پرداختی (کل چک یا فیش)',
+                        label: 'مبلغ دریافتی (کل چک یا فیش)',
                         onChanged: (val) => setState(() => _paymentAmount = val),
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<PaymentMethod>(
                         value: _selectedMethod,
-                        decoration: const InputDecoration(labelText: 'روش پرداخت', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'روش دریافت', border: OutlineInputBorder()),
                         items: const [
                           DropdownMenuItem(value: PaymentMethod.cash, child: Text('نقدی')),
                           DropdownMenuItem(value: PaymentMethod.card, child: Text('کارت به کارت')),
@@ -194,19 +194,19 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                       TextFormField(
                         controller: _descriptionController,
                         validator: (v) => (v == null || v.isEmpty) ? 'لطفاً توضیحات را وارد کنید' : null,
-                        decoration: const InputDecoration(labelText: 'توضیحات (مثلاً شماره چک یا پیگیری)', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'توضیحات (مثلاً شماره چک یا فیش)', border: OutlineInputBorder()),
                       ),
                       const SizedBox(height: 32),
                       SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _saveBulkPayment,
+                          onPressed: _saveBulkCollection,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.primaryColor,
+                            backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                           ),
-                          child: const Text('ثبت نهایی تسویه گروهی'),
+                          child: const Text('ثبت نهایی دریافت گروهی'),
                         ),
                       ),
                       const SizedBox(height: 40),
@@ -225,7 +225,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
     );
   }
 
-  Future<void> _saveBulkPayment() async {
+  Future<void> _saveBulkCollection() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedServiceIds.isEmpty) {
@@ -234,62 +234,57 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
     }
 
     if (_paymentAmount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ پرداختی را وارد کنید')));
-      return;
-    }
-
-    if (_selectedMethod == PaymentMethod.check && _checkDueDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً تاریخ سررسید چک را انتخاب کنید')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ دریافتی را وارد کنید')));
       return;
     }
 
     try {
       double remainingToDistribute = _paymentAmount;
-      final servicesToPay = _unsettledServices
+      final servicesToCollect = _unsettledServices
           .where((s) => _selectedServiceIds.contains(s.id))
           .toList();
 
-      for (var service in servicesToPay) {
+      for (var service in servicesToCollect) {
         if (remainingToDistribute <= 0) break;
 
-        double debt = service.finalBalanceToSeller;
+        double debt = service.finalBalanceCustomerDebt;
         double amountForThisService = remainingToDistribute >= debt ? debt : remainingToDistribute;
 
         final payment = Payment(
           id: DateTime.now().millisecondsSinceEpoch.toString() + service.id,
           serviceId: service.id,
-          type: PaymentType.toSeller,
+          type: PaymentType.fromCustomer,
           method: _selectedMethod,
           amount: amountForThisService,
           date: _selectedDate,
-          description: "${_descriptionController.text} (تسویه گروهی)",
+          description: "${_descriptionController.text} (دریافت گروهی)",
           checkDueDate: _checkDueDate,
           isCleared: _selectedMethod != PaymentMethod.check,
         );
 
-        await _repository.savePayment(payment, serviceId: service.id);
+        await _repository.savePayment(payment, serviceId: service.id, customerId: _selectedCustomer?.id);
         remainingToDistribute -= amountForThisService;
       }
 
-      // If there's still money left, it's a general payment to the seller (prepayment/overpayment)
+      // If there's still money left, it's a general payment to the customer (overpayment/prepayment)
       if (remainingToDistribute > 0) {
-        final extraPayment = Payment(
+          final extraPayment = Payment(
           id: DateTime.now().millisecondsSinceEpoch.toString() + "extra",
-          sellerId: _selectedSeller?.id,
-          type: PaymentType.toSeller,
+          customerId: _selectedCustomer?.id,
+          type: PaymentType.fromCustomer,
           method: _selectedMethod,
           amount: remainingToDistribute,
           date: _selectedDate,
-          description: "${_descriptionController.text} (مازاد تسویه گروهی)",
+          description: "${_descriptionController.text} (مازاد دریافت گروهی)",
           checkDueDate: _checkDueDate,
           isCleared: _selectedMethod != PaymentMethod.check,
         );
-        await _repository.savePayment(extraPayment, sellerId: _selectedSeller?.id);
+        await _repository.savePayment(extraPayment, customerId: _selectedCustomer?.id);
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تسویه گروهی با موفقیت ثبت شد'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('دریافت گروهی با موفقیت ثبت شد'), backgroundColor: Colors.green),
         );
         Navigator.pop(context, true);
       }

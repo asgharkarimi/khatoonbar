@@ -87,7 +87,7 @@ class DatabaseHelper {
     return res.map((m) => Car.fromMap(m)).toList();
   }
 
-  // Logistics Companies (New)
+  // Logistics Companies
   Future<void> insertLogisticsCo(LogisticsCo co) async => await insert('logistics_cos', co.toMap());
   Future<List<LogisticsCo>> getAllLogisticsCos() async {
     final res = await queryAll('logistics_cos');
@@ -183,17 +183,21 @@ class DatabaseHelper {
           logisticsCo: logisticsMap.isNotEmpty ? LogisticsCo.fromMap(logisticsMap) : null,
           paymentsToSeller: servicePayments.where((p) => p.type == PaymentType.toSeller).toList(),
           collectionsFromCustomer: servicePayments.where((p) => p.type == PaymentType.fromCustomer).toList(),
+          paymentsToLogistics: servicePayments.where((p) => p.type == PaymentType.toLogistics).toList(),
+          paymentsToDriver: servicePayments.where((p) => p.type == PaymentType.toDriver).toList(),
         ));
       }
     }
     return services;
   }
   
-  Future<void> insertPayment(Payment payment, {String? serviceId, String? sellerId, String? customerId}) async {
+  Future<void> insertPayment(Payment payment, {String? serviceId, String? sellerId, String? customerId, String? logisticsId, String? driverId}) async {
     final map = payment.toMap();
     if (serviceId != null) map['serviceId'] = serviceId;
     if (sellerId != null) map['sellerId'] = sellerId;
     if (customerId != null) map['customerId'] = customerId;
+    if (logisticsId != null) map['logisticsId'] = logisticsId;
+    if (driverId != null) map['driverId'] = driverId;
     
     if (map['id'] == null) map['id'] = DateTime.now().millisecondsSinceEpoch.toString();
     await insert('payments', map);

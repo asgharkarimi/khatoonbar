@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../core/database/database_helper.dart';
+import '../../../core/data/service_repository.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/models.dart';
-import '../../widgets/amount_input.dart';
 
 class ManageBankAccountsScreen extends StatefulWidget {
   const ManageBankAccountsScreen({super.key});
@@ -12,7 +11,9 @@ class ManageBankAccountsScreen extends StatefulWidget {
 }
 
 class _ManageBankAccountsScreenState extends State<ManageBankAccountsScreen> {
+  final ServiceRepository _repository = ServiceRepository();
   List<BankAccount> _accounts = [];
+  Map<String, double> _balances = {};
   bool _isLoading = true;
   final _formKey = GlobalKey<FormState>();
 
@@ -24,166 +25,278 @@ class _ManageBankAccountsScreenState extends State<ManageBankAccountsScreen> {
 
   Future<void> _loadAccounts() async {
     setState(() => _isLoading = true);
-    final accounts = await DatabaseHelper.instance.getAllBankAccounts();
+    final accounts = await _repository.getBankAccounts();
+    Map<String, double> balances = {};
+    for (var acc in accounts) {
+      balances[acc.id] = await _repository.getAccountBalance(acc.id);
+    }
     setState(() {
       _accounts = accounts;
+      _balances = balances;
       _isLoading = false;
     });
   }
 
   void _showAddAccountDialog() {
     final bankNameController = TextEditingController();
-    final accountNumberController = TextEditingController();
+    final accountInfoController = TextEditingController();
     final accountOwnerController = TextEditingController();
-    final cardNumberController = TextEditingController();
-    final shebaController = TextEditingController();
-    double initialBalance = 0;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('افزودن حساب بانکی'),
-        content: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: bankNameController,
-                  decoration: const InputDecoration(labelText: 'نام بانک (اجباری)', border: OutlineInputBorder()),
-                  validator: (v) => (v == null || v.isEmpty) ? 'نام بانک را وارد کنید' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: accountNumberController,
-                  decoration: const InputDecoration(labelText: 'شماره حساب (اجباری)', border: OutlineInputBorder()),
-                  validator: (v) => (v == null || v.isEmpty) ? 'شماره حساب را وارد کنید' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: accountOwnerController,
-                  decoration: const InputDecoration(labelText: 'نام صاحب حساب (اجباری)', border: OutlineInputBorder()),
-                  validator: (v) => (v == null || v.isEmpty) ? 'نام صاحب حساب را وارد کنید' : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: cardNumberController,
-                  decoration: const InputDecoration(labelText: 'شماره کارت (اختیاری)', border: OutlineInputBorder()),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: shebaController,
-                  decoration: const InputDecoration(labelText: 'شماره شبا (اختیاری)', border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 12),
-                AmountInput(
-                  label: 'موجودی اولیه (تومان)',
-                  onChanged: (val) => initialBalance = val,
-                ),
-              ],
+      builder: (context) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.account_balance_outlined, color: Colors.green.shade700, size: 28),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'اطلاعات واریز کرایه',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Color(0xFF4A5568),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(thickness: 1, color: Color(0xFFE2E8F0)),
+                  const SizedBox(height: 16),
+                  _buildStyledField(
+                    controller: bankNameController,
+                    hint: 'نام بانک',
+                    icon: Icons.account_balance_rounded,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStyledField(
+                    controller: accountInfoController,
+                    hint: 'شماره حساب/کارت',
+                    icon: Icons.credit_card_rounded,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildStyledField(
+                    controller: accountOwnerController,
+                    hint: 'نام صاحب حساب',
+                    icon: Icons.person_outline_rounded,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          ElevatedButton(
-            onPressed: () async {
-              if (_formKey.currentState!.validate()) {
-                final newAccount = BankAccount(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
-                  bankName: bankNameController.text.trim(),
-                  accountNumber: accountNumberController.text.trim(),
-                  accountOwner: accountOwnerController.text.trim(),
-                  cardNumber: cardNumberController.text.trim(),
-                  sheba: shebaController.text.trim(),
-                  initialBalance: initialBalance,
-                );
-                await DatabaseHelper.instance.insertBankAccount(newAccount);
-                if (mounted) {
-                  Navigator.pop(context);
-                  _loadAccounts();
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('انصراف', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () async {
+                if (_formKey.currentState!.validate()) {
+                  final newAccount = BankAccount(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    bankName: bankNameController.text.trim(),
+                    accountNumber: accountInfoController.text.trim(),
+                    accountOwner: accountOwnerController.text.trim(),
+                    initialBalance: 0,
+                  );
+                  await _repository.saveBankAccount(newAccount);
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _loadAccounts();
+                  }
                 }
-              }
-            },
-            child: const Text('ذخیره'),
-          ),
-        ],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              },
+              child: const Text('ذخیره اطلاعات', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildStyledField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+  }) {
+    return TextFormField(
+      controller: controller,
+      textAlign: TextAlign.right,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 15),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 22),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(color: Colors.green.shade600, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      validator: (v) => (v == null || v.isEmpty) ? 'این فیلد اجباری است' : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('مدیریت حساب‌های من')),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _accounts.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.account_balance_wallet_outlined, size: 64, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
-                      const Text('هنوز هیچ حسابی ثبت نکرده‌اید'),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _accounts.length,
-                  itemBuilder: (context, index) {
-                    final account = _accounts[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade50,
-                          child: const Icon(Icons.account_balance, color: Colors.blue),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        appBar: AppBar(
+          title: const Text('مدیریت حساب‌های بانکی'),
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1E293B),
+        ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _accounts.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.account_balance_wallet_outlined, size: 80, color: Colors.blueGrey.shade100),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'هنوز هیچ حسابی ثبت نکرده‌اید',
+                          style: TextStyle(color: Colors.blueGrey, fontSize: 16),
                         ),
-                        title: Text(account.bankName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("صاحب حساب: ${account.accountOwner}"),
-                            Text("شماره: ${account.accountNumber}"),
-                            if (account.cardNumber != null && account.cardNumber!.isNotEmpty)
-                              Text("کارت: ${account.cardNumber}"),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: _accounts.length,
+                    itemBuilder: (context, index) {
+                      final account = _accounts[index];
+                      final currentBalance = _balances[account.id] ?? 0;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
                           ],
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('حذف حساب'),
-                                content: const Text('آیا از حذف این حساب بانکی مطمئن هستید؟'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              leading: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.account_balance, color: Colors.blue),
+                              ),
+                              title: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    account.bankName,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
+                                  ),
+                                  Text(
+                                    AppFormatters.formatCurrency(currentBalance),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: currentBalance >= 0 ? Colors.green.shade700 : Colors.red.shade700,
+                                    ),
+                                  ),
                                 ],
                               ),
-                            );
-                            if (confirm == true) {
-                              await DatabaseHelper.instance.delete('bank_accounts', account.id);
-                              _loadAccounts();
-                            }
-                          },
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "صاحب حساب: ${account.accountOwner}",
+                                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                                  ),
+                                  Text(
+                                    "شماره: ${account.accountNumber}",
+                                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                                onPressed: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => Directionality(
+                                      textDirection: TextDirection.rtl,
+                                      child: AlertDialog(
+                                        title: const Text('حذف حساب'),
+                                        content: const Text('آیا از حذف این حساب بانکی مطمئن هستید؟'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context, true),
+                                            child: const Text('بله', style: TextStyle(color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await _repository.deleteBankAccount(account.id);
+                                    _loadAccounts();
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddAccountDialog,
-        icon: const Icon(Icons.add),
-        label: const Text('افزودن حساب جدید'),
+                      );
+                    },
+                  ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _showAddAccountDialog,
+          backgroundColor: const Color(0xFF1E293B),
+          foregroundColor: Colors.white,
+          elevation: 4,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('افزودن حساب جدید', style: TextStyle(fontWeight: FontWeight.bold)),
+        ),
       ),
     );
   }

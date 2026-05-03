@@ -6,26 +6,26 @@ import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
 import '../widgets/amount_input.dart';
 
-class BulkSettlementScreen extends StatefulWidget {
-  final Seller? initialSeller;
-  const BulkSettlementScreen({super.key, this.initialSeller});
+class BulkLogisticsSettlementScreen extends StatefulWidget {
+  final LogisticsCo? initialLogisticsCo;
+  const BulkLogisticsSettlementScreen({super.key, this.initialLogisticsCo});
 
   @override
-  State<BulkSettlementScreen> createState() => _BulkSettlementScreenState();
+  State<BulkLogisticsSettlementScreen> createState() => _BulkLogisticsSettlementScreenState();
 }
 
-class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
+class _BulkLogisticsSettlementScreenState extends State<BulkLogisticsSettlementScreen> {
   final ServiceRepository _repository = ServiceRepository();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = true;
 
-  List<Seller> _sellers = [];
-  Seller? _selectedSeller;
+  List<LogisticsCo> _logisticsCos = [];
+  LogisticsCo? _selectedLogistics;
   List<LoadService> _unsettledServices = [];
   final Set<String> _selectedServiceIds = {};
 
   double _paymentAmount = 0;
-  PaymentMethod _selectedMethod = PaymentMethod.check;
+  PaymentMethod _selectedMethod = PaymentMethod.cash;
   final TextEditingController _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   DateTime? _checkDueDate;
@@ -37,26 +37,26 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   }
 
   Future<void> _loadInitialData() async {
-    final sellers = await _repository.getSellers();
+    final logistics = await _repository.getLogisticsCos();
     setState(() {
-      _sellers = sellers;
-      if (widget.initialSeller != null) {
-        _selectedSeller = sellers.firstWhere((s) => s.id == widget.initialSeller!.id, orElse: () => widget.initialSeller!);
+      _logisticsCos = logistics;
+      if (widget.initialLogisticsCo != null) {
+        _selectedLogistics = logistics.firstWhere((l) => l.id == widget.initialLogisticsCo!.id, orElse: () => widget.initialLogisticsCo!);
       }
       _isLoading = false;
     });
-    if (_selectedSeller != null) {
-      _loadUnsettledServices(_selectedSeller!.id);
+    if (_selectedLogistics != null) {
+      _loadUnsettledServices(_selectedLogistics!.id);
     }
   }
 
-  Future<void> _loadUnsettledServices(String sellerId) async {
+  Future<void> _loadUnsettledServices(String logisticsId) async {
     setState(() => _isLoading = true);
     final allServices = await _repository.getAllServices();
     setState(() {
       // Filter services that still have a "final balance" (debt minus all payments including pending checks)
       _unsettledServices = allServices
-          .where((s) => s.seller.id == sellerId && s.finalBalanceToSeller > 0)
+          .where((s) => s.logisticsCo?.id == logisticsId && s.finalBalanceLogisticsDebt > 0)
           .toList();
       _selectedServiceIds.clear();
       _isLoading = false;
@@ -66,7 +66,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
   double get _totalSelectedDebt {
     return _unsettledServices
         .where((s) => _selectedServiceIds.contains(s.id))
-        .fold(0, (sum, s) => sum + s.finalBalanceToSeller);
+        .fold(0, (sum, s) => sum + s.finalBalanceLogisticsDebt);
   }
 
   @override
@@ -74,7 +74,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('تسویه گروهی با فروشنده')),
+      appBar: AppBar(title: const Text('تسویه گروهی با باربری')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -84,25 +84,25 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle('۱. انتخاب فروشنده'),
-                    DropdownButtonFormField<Seller>(
-                      value: _selectedSeller,
+                    _buildSectionTitle('۱. انتخاب باربری'),
+                    DropdownButtonFormField<LogisticsCo>(
+                      value: _selectedLogistics,
                       decoration: InputDecoration(
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        prefixIcon: const Icon(Icons.store),
+                        prefixIcon: const Icon(Icons.business),
                       ),
-                      validator: (v) => v == null ? 'لطفاً فروشنده را انتخاب کنید' : null,
-                      items: _sellers.map((s) => DropdownMenuItem(value: s, child: Text(s.name))).toList(),
+                      validator: (v) => v == null ? 'لطفاً باربری را انتخاب کنید' : null,
+                      items: _logisticsCos.map((l) => DropdownMenuItem(value: l, child: Text(l.name))).toList(),
                       onChanged: (val) {
-                        setState(() => _selectedSeller = val);
+                        setState(() => _selectedLogistics = val);
                         if (val != null) _loadUnsettledServices(val.id);
                       },
                     ),
                     const SizedBox(height: 24),
-                    if (_selectedSeller != null) ...[
+                    if (_selectedLogistics != null) ...[
                       _buildSectionTitle('۲. انتخاب سرویس‌های مورد نظر'),
                       if (_unsettledServices.isEmpty)
-                        const Text('هیچ سرویس تسویه نشده‌ای (با مانده بدهی نهایی) برای این فروشنده یافت نشد.')
+                        const Text('هیچ سرویس تسویه نشده‌ای (با مانده بدهی نهایی) برای این باربری یافت نشد.')
                       else
                         ListView.builder(
                           shrinkWrap: true,
@@ -115,17 +115,18 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                               margin: const EdgeInsets.only(bottom: 8),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                side: BorderSide(color: isSelected ? theme.primaryColor : Colors.transparent, width: 2),
+                                side: BorderSide(color: isSelected ? Colors.orange : Colors.transparent, width: 2),
                               ),
                               child: CheckboxListTile(
                                 value: isSelected,
+                                activeColor: Colors.orange,
                                 title: Text("${service.loadType.name} - ${service.orderCode}"),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text("مانده بدهی نهایی: ${AppFormatters.formatCurrency(service.finalBalanceToSeller)} تومان"),
-                                    if (service.pendingSellerChecks > 0)
-                                      Text("چک در جریان: ${AppFormatters.formatCurrency(service.pendingSellerChecks)} تومان", style: const TextStyle(fontSize: 10, color: Colors.orange)),
+                                    Text("مانده بدهی نهایی: ${AppFormatters.formatCurrency(service.finalBalanceLogisticsDebt)} تومان"),
+                                    if (service.pendingLogisticsChecks > 0)
+                                      Text("چک در جریان: ${AppFormatters.formatCurrency(service.pendingLogisticsChecks)} تومان", style: const TextStyle(fontSize: 10, color: Colors.orange)),
                                   ],
                                 ),
                                 onChanged: (val) {
@@ -146,12 +147,12 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.05),
+                          color: Colors.orange.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           "جمع بدهی انتخاب شده: ${AppFormatters.formatCurrency(_totalSelectedDebt)} تومان",
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -201,9 +202,9 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _saveBulkPayment,
+                          onPressed: _saveBulkLogisticsPayment,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.primaryColor,
+                            backgroundColor: Colors.orange.shade800,
                             foregroundColor: Colors.white,
                           ),
                           child: const Text('ثبت نهایی تسویه گروهی'),
@@ -225,7 +226,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
     );
   }
 
-  Future<void> _saveBulkPayment() async {
+  Future<void> _saveBulkLogisticsPayment() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedServiceIds.isEmpty) {
@@ -238,11 +239,6 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
       return;
     }
 
-    if (_selectedMethod == PaymentMethod.check && _checkDueDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً تاریخ سررسید چک را انتخاب کنید')));
-      return;
-    }
-
     try {
       double remainingToDistribute = _paymentAmount;
       final servicesToPay = _unsettledServices
@@ -252,13 +248,13 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
       for (var service in servicesToPay) {
         if (remainingToDistribute <= 0) break;
 
-        double debt = service.finalBalanceToSeller;
+        double debt = service.finalBalanceLogisticsDebt;
         double amountForThisService = remainingToDistribute >= debt ? debt : remainingToDistribute;
 
         final payment = Payment(
           id: DateTime.now().millisecondsSinceEpoch.toString() + service.id,
           serviceId: service.id,
-          type: PaymentType.toSeller,
+          type: PaymentType.toLogistics,
           method: _selectedMethod,
           amount: amountForThisService,
           date: _selectedDate,
@@ -267,16 +263,16 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
           isCleared: _selectedMethod != PaymentMethod.check,
         );
 
-        await _repository.savePayment(payment, serviceId: service.id);
+        await _repository.savePayment(payment, serviceId: service.id, logisticsId: _selectedLogistics?.id);
         remainingToDistribute -= amountForThisService;
       }
 
-      // If there's still money left, it's a general payment to the seller (prepayment/overpayment)
+      // If there's still money left, it's a general payment to the logistics company (prepayment/overpayment)
       if (remainingToDistribute > 0) {
         final extraPayment = Payment(
           id: DateTime.now().millisecondsSinceEpoch.toString() + "extra",
-          sellerId: _selectedSeller?.id,
-          type: PaymentType.toSeller,
+          logisticsId: _selectedLogistics?.id,
+          type: PaymentType.toLogistics,
           method: _selectedMethod,
           amount: remainingToDistribute,
           date: _selectedDate,
@@ -284,7 +280,7 @@ class _BulkSettlementScreenState extends State<BulkSettlementScreen> {
           checkDueDate: _checkDueDate,
           isCleared: _selectedMethod != PaymentMethod.check,
         );
-        await _repository.savePayment(extraPayment, sellerId: _selectedSeller?.id);
+        await _repository.savePayment(extraPayment, logisticsId: _selectedLogistics?.id);
       }
 
       if (mounted) {

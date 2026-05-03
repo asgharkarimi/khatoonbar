@@ -29,13 +29,13 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
     });
   }
 
-  void _showAddLoadTypeDialog() {
-    final nameController = TextEditingController();
+  void _showLoadTypeDialog({LoadType? loadType}) {
+    final nameController = TextEditingController(text: loadType?.name);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('افزودن نوع بار جدید', style: TextStyle(fontSize: 16)),
+        title: Text(loadType == null ? 'افزودن نوع بار جدید' : 'ویرایش نوع بار', style: const TextStyle(fontSize: 16)),
         content: Form(
           key: _formKey,
           child: TextFormField(
@@ -50,7 +50,7 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
             onPressed: () async {
               if (_formKey.currentState!.validate()) {
                 final newType = LoadType(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: loadType?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
                   name: nameController.text.trim(),
                 );
                 await DatabaseHelper.instance.insertLoadType(newType);
@@ -91,26 +91,35 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
                           child: const Icon(Icons.category, color: Colors.purple),
                         ),
                         title: Text(type.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('تایید حذف'),
-                                content: Text('آیا از حذف "${type.name}" اطمینان دارید؟'),
-                                actions: [
-                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
-                                  TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
-                                ],
-                              ),
-                            );
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                              onPressed: () => _showLoadTypeDialog(loadType: type),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('تایید حذف'),
+                                    content: Text('آیا از حذف "${type.name}" اطمینان دارید؟'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('خیر')),
+                                      TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('بله')),
+                                    ],
+                                  ),
+                                );
 
-                            if (confirm == true) {
-                              await DatabaseHelper.instance.delete('load_types', type.id);
-                              _refreshLoadTypes();
-                            }
-                          },
+                                if (confirm == true) {
+                                  await DatabaseHelper.instance.delete('load_types', type.id);
+                                  _refreshLoadTypes();
+                                }
+                              },
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -118,7 +127,7 @@ class _ManageLoadTypesScreenState extends State<ManageLoadTypesScreen> {
                 ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddLoadTypeDialog,
+        onPressed: () => _showLoadTypeDialog(),
         backgroundColor: Colors.purple,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('افزودن نوع بار جدید', style: TextStyle(color: Colors.white)),

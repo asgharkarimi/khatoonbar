@@ -30,7 +30,7 @@ void main() async {
       Hive.openBox('maintenances'),
       Hive.openBox('logistics_cos'), 
       Hive.openBox('settings'),
-      Hive.openBox('bank_accounts'), // اضافه شد: باز کردن صندوقچه حساب‌های بانکی
+      Hive.openBox('bank_accounts'),
     ]);
 
     // ۴. دیتای اولیه
@@ -43,11 +43,12 @@ void main() async {
   // ۵. اجرای اپلیکیشن
   runApp(const KhatoonBarApp());
 
-  // ۶. کارهای غیرضروری را بعد از لود شدن کامل انجام می‌دهیم
+  // ۶. کارهای پس‌زمینه و اعلان‌ها
   Future.microtask(() async {
     try {
       await NotificationService.init();
       await NotificationService.checkDueChecks();
+      await NotificationService.checkMaintenanceReminders();
     } catch (e) {
       debugPrint("خطا در سرویس اعلان: $e");
     }
@@ -110,9 +111,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             });
           },
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'گزارشات'),
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'خانه'),
-            BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'تنظیمات'),
+            BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), activeIcon: Icon(Icons.analytics), label: 'گزارشات'),
+            BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'خانه'),
+            BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), activeIcon: Icon(Icons.settings), label: 'تنظیمات'),
           ],
         ),
       ),

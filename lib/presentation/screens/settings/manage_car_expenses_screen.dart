@@ -1,8 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/models.dart';
+import '../../widgets/amount_input.dart';
 
 class ManageCarExpensesScreen extends StatefulWidget {
   const ManageCarExpensesScreen({super.key});
@@ -29,6 +33,7 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
     final cars = await DatabaseHelper.instance.getAllCars();
     setState(() {
       _expenses = expenses;
+      _expenses.sort((a, b) => b.date.compareTo(a.date));
       _cars = cars;
       _isLoading = false;
     });
@@ -36,8 +41,10 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
 
   void _showAddExpenseDialog() {
     final descriptionController = TextEditingController();
-    final amountController = TextEditingController();
-    Car? selectedCar;
+    double amount = 0;
+    DateTime selectedDate = DateTime.now();
+    Car? selectedCar = _cars.isNotEmpty ? _cars.first : null;
+    String? imagePath;
 
     showDialog(
       context: context,
@@ -51,6 +58,7 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<Car>(
+                    value: selectedCar,
                     decoration: const InputDecoration(labelText: 'انتخاب ماشین', border: OutlineInputBorder()),
                     items: _cars.map((car) => DropdownMenuItem(
                       value: car,
@@ -66,11 +74,54 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                     validator: (v) => (v == null || v.isEmpty) ? 'شرح هزینه را وارد کنید' : null,
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: amountController,
-                    decoration: const InputDecoration(labelText: 'مبلغ (تومان)', border: OutlineInputBorder()),
-                    keyboardType: TextInputType.number,
-                    validator: (v) => (v == null || v.isEmpty) ? 'مبلغ را وارد کنید' : null,
+                  AmountInput(
+                    label: 'مبلغ (تومان)',
+                    onChanged: (val) => amount = val,
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                    title: const Text('تاریخ هزینه', style: TextStyle(fontSize: 14)),
+                    subtitle: Text(selectedDate.toPersianDate()),
+                    trailing: const Icon(Icons.calendar_today, size: 20),
+                    onTap: () async {
+                      final picked = await showPersianDatePicker(
+                        context: context,
+                        initialDate: Jalali.fromDateTime(selectedDate),
+                        firstDate: Jalali(1400),
+                        lastDate: Jalali(1450),
+                      );
+                      if (picked != null) setDialogState(() => selectedDate = picked.toDateTime());
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final picked = await picker.pickImage(source: ImageSource.gallery);
+                      if (picked != null) setDialogState(() => imagePath = picked.path);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey.shade50,
+                      ),
+                      child: imagePath == null 
+                        ? const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined, color: Colors.grey),
+                              Text('افزودن تصویر رسید', style: TextStyle(color: Colors.grey, fontSize: 10)),
+                            ],
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(File(imagePath!), fit: BoxFit.cover),
+                          ),
+                    ),
                   ),
                 ],
               ),
@@ -80,13 +131,14 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
             ElevatedButton(
               onPressed: () async {
-                if (_formKey.currentState!.validate()) {
+                if (_formKey.currentState!.validate() && amount > 0) {
                   final expense = CarExpense(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
                     carId: selectedCar!.id,
                     description: descriptionController.text.trim(),
-                    amount: double.tryParse(amountController.text) ?? 0,
-                    date: DateTime.now(),
+                    amount: amount,
+                    date: selectedDate,
+                    receiptImagePath: imagePath,
                   );
                   await DatabaseHelper.instance.insertCarExpense(expense);
                   if (mounted) {
@@ -100,6 +152,21 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
             ),
           ],
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+      ),
+    );
+  }
+
+  void _showImageDialog(String path) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(title: const Text('تصویر رسید'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
+            Flexible(child: SingleChildScrollView(child: Image.file(File(path), fit: BoxFit.contain))),
+          ],
         ),
       ),
     );
@@ -137,12 +204,15 @@ class _ManageCarExpensesScreenState extends State<ManageCarExpensesScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (expense.receiptImagePath != null)
+                              IconButton(
+                                icon: const Icon(Icons.receipt_long, color: Colors.blue),
+                                onPressed: () => _showImageDialog(expense.receiptImagePath!),
+                              ),
                             Text(
                               "${AppFormatters.formatCurrency(expense.amount)}",
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
                             ),
-                            const SizedBox(width: 4),
-                            const Text("تومان", style: TextStyle(fontSize: 10, color: Colors.grey)),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                               onPressed: () async {

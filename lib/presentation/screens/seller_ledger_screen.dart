@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_service.dart';
 import '../../models/models.dart';
 import 'add_payment_screen.dart';
+import 'bulk_settlement_screen.dart';
 import 'service_details_screen.dart';
 
 class SellerLedgerScreen extends StatefulWidget {
@@ -41,24 +44,104 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
     
     setState(() {
       _services = allServices.where((s) => s.seller.id == widget.seller.id).toList();
-      _generalPayments = allPayments.where((p) => 
-        p.sellerId == widget.seller.id || 
-        _services.any((s) => s.id == p.serviceId)
+      
+      final sellerServiceIds = _services.map((s) => s.id).toSet();
+      
+      final filteredPayments = allPayments.where((p) => 
+        p.type == PaymentType.toSeller && (
+          p.sellerId == widget.seller.id || 
+          (p.serviceId != null && sellerServiceIds.contains(p.serviceId))
+        )
       ).toList();
+
+      final Map<String, Payment> uniquePayments = {};
+      for (var p in filteredPayments) {
+        if (p.id != null) uniquePayments[p.id!] = p;
+      }
+      
+      _generalPayments = uniquePayments.values.toList();
+      _generalPayments.sort((a, b) => b.date.compareTo(a.date));
+      
       _isLoading = false;
     });
+  }
+
+  Future<void> _toggleCheckStatus(Payment p) async {
+    final updatedPayment = Payment(
+      id: p.id,
+      serviceId: p.serviceId,
+      sellerId: p.sellerId,
+      customerId: p.customerId,
+      logisticsId: p.logisticsId,
+      myAccountId: p.myAccountId,
+      type: p.type,
+      method: p.method,
+      amount: p.amount,
+      date: p.date,
+      description: p.description,
+      receiptImagePath: p.receiptImagePath,
+      checkDueDate: p.checkDueDate,
+      checkImagePath: p.checkImagePath,
+      bankName: p.bankName,
+      checkNumber: p.checkNumber,
+      isCleared: !p.isCleared,
+    );
+
+    await DatabaseHelper.instance.insertPayment(updatedPayment);
+    _loadData();
+  }
+
+  Future<void> _deletePayment(String id) async {
+    await DatabaseHelper.instance.delete('payments', id);
+    _loadData();
+  }
+
+  void _showImageDialog(String path) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(title: const Text('تصویر تراکنش'), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
+            Flexible(child: SingleChildScrollView(child: Image.file(File(path), fit: BoxFit.contain))),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     double totalDebt = _services.fold(0, (sum, s) => sum + s.totalPurchaseAmount);
     double totalPaid = _generalPayments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
-    double balance = totalDebt - totalPaid;
+    double pendingChecks = _generalPayments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
+    double balance = totalDebt - totalPaid - pendingChecks;
 
     return Scaffold(
       appBar: AppBar(
         title: Text("دفتر حساب: ${widget.seller.name}"),
         actions: [
+          if (widget.seller.accountNumber != null && widget.seller.accountNumber!.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.copy_all_outlined),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: widget.seller.accountNumber!));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("شماره حساب کپی شد")));
+              },
+              tooltip: 'کپی شماره حساب',
+            ),
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => BulkSettlementScreen(initialSeller: widget.seller))
+              );
+              if (result == true) _loadData();
+            },
+            tooltip: 'تسویه گروهی',
+          ),
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
             onPressed: () => PdfService.generateAndPrintSellerLedger(widget.seller, _services, _generalPayments),
@@ -68,8 +151,8 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: "بارها (بدهی)", icon: Icon(Icons.local_shipping_outlined)),
-            Tab(text: "پرداخت‌ها (بستانکاری)", icon: Icon(Icons.payments_outlined)),
+            Tab(text: "بدهی ما (خریدها)", icon: Icon(Icons.local_shipping_outlined)),
+            Tab(text: "پرداختی‌های ما", icon: Icon(Icons.payments_outlined)),
           ],
         ),
       ),
@@ -77,7 +160,7 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
         ? const Center(child: CircularProgressIndicator())
         : Column(
             children: [
-              _buildBalanceHeader(totalDebt, totalPaid, balance),
+              _buildBalanceHeader(totalDebt, totalPaid, pendingChecks, balance),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -117,35 +200,25 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
           );
           if (result == true) _loadData();
         },
-        label: const Text("ثبت چک / پرداخت کلی"),
+        label: const Text("ثبت پرداختی جدید"),
         icon: const Icon(Icons.add_card),
         backgroundColor: Colors.red.shade800,
       ),
     );
   }
 
-  Widget _buildBalanceHeader(double debt, double paid, double balance) {
-    String statusLabel = "تسویه شده";
-    if (balance > 0) {
-      statusLabel = "مانده بدهی شما:";
-    } else if (balance < 0) {
-      statusLabel = "بستانکاری (طلب شما):";
-    }
+  Widget _buildBalanceHeader(double debt, double paid, double checks, double balance) {
+    String statusLabel = "مانده بدهی نهایی ما:";
+    if (balance <= 0) statusLabel = "تسویه شده / بستانکار:";
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-      ),
+      decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]),
       child: Card(
         color: balance > 0 ? Colors.red.shade50 : (balance < 0 ? Colors.green.shade50 : Colors.blue.shade50),
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12), 
-          side: BorderSide(color: balance > 0 ? Colors.red.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: balance > 0 ? Colors.red.shade100 : (balance < 0 ? Colors.green.shade100 : Colors.blue.shade100))),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -156,11 +229,7 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
                   Text(statusLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(
                     "${AppFormatters.formatCurrency(balance.abs())} تومان",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold, 
-                      color: balance > 0 ? Colors.red.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), 
-                      fontSize: 18
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.red.shade900 : (balance < 0 ? Colors.green.shade900 : Colors.blue.shade900), fontSize: 18),
                   ),
                 ],
               ),
@@ -171,7 +240,9 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
                   children: [
                     _headerInfoItem("کل خرید", debt, Colors.black87),
                     const VerticalDivider(),
-                    _headerInfoItem("کل پرداختی", paid, Colors.green.shade700),
+                    _headerInfoItem("پرداخت شده", paid, Colors.green.shade700),
+                    const VerticalDivider(),
+                    _headerInfoItem("چک معلق", checks, Colors.orange.shade800),
                   ],
                 ),
               ),
@@ -185,15 +256,15 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
   Widget _headerInfoItem(String label, double amount, Color color) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(AppFormatters.formatCurrency(amount), style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+        Text(AppFormatters.formatCurrency(amount), style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13)),
       ],
     );
   }
 
   Widget _buildServicesList() {
-    if (_services.isEmpty) return _buildEmptyState("باری یافت نشد");
+    if (_services.isEmpty) return _buildEmptyState("خرید ثبت شده‌ای یافت نشد");
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _services.length,
@@ -228,32 +299,19 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         onTap: () async {
-          final result = await Navigator.push(
-            context, 
-            MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: s))
-          );
-          if (result == true || result == null) _loadData();
+          await Navigator.push(context, MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: s)));
+          _loadData();
         },
         title: Text("${s.loadType.name} - ${s.weight.toString().toPersianDigit()} تن", style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(s.date.toPersianDate(), style: const TextStyle(fontSize: 11)),
-              ],
-            ),
-            if (s.orderCode.isNotEmpty)
-              Text("کد سفارش: ${s.orderCode}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+            Row(children: [const Icon(Icons.calendar_today, size: 12, color: Colors.grey), const SizedBox(width: 4), Text(s.date.toPersianDate(), style: const TextStyle(fontSize: 11))]),
+            if (s.orderCode.isNotEmpty) Text("کد سفارش: ${s.orderCode.toPersianDigit()}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
           ],
         ),
-        trailing: Text(
-          AppFormatters.formatCurrency(s.totalPurchaseAmount),
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-        ),
+        trailing: Text(AppFormatters.formatCurrency(s.totalPurchaseAmount), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
       ),
     );
   }
@@ -267,78 +325,81 @@ class _SellerLedgerScreenState extends State<SellerLedgerScreen> with SingleTick
     if (isPendingCheck && p.checkDueDate != null) {
       daysLeft = p.checkDueDate!.difference(DateTime.now()).inDays;
       progress = 1.0 - (daysLeft / 15.0).clamp(0.0, 1.0);
-      
-      if (daysLeft <= 3) {
-        progressBarColor = Colors.red;
-      } else if (daysLeft <= 7) {
-        progressBarColor = Colors.orange;
-      }
+      if (daysLeft <= 3) progressBarColor = Colors.red;
+      else if (daysLeft <= 7) progressBarColor = Colors.orange;
     }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: isPendingCheck ? Colors.orange.shade50.withValues(alpha: 0.5) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: isPendingCheck ? progressBarColor.withValues(alpha: 0.3) : Colors.grey.shade100),
-      ),
+      color: isPendingCheck ? Colors.orange.shade50.withOpacity(0.5) : Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isPendingCheck ? progressBarColor.withOpacity(0.3) : Colors.grey.shade100)),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           children: [
             ListTile(
+              onLongPress: () => _showPaymentOptions(p),
               leading: CircleAvatar(
-                backgroundColor: isPendingCheck ? progressBarColor.withValues(alpha: 0.1) : Colors.green.shade100,
-                child: Icon(
-                  p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, 
-                  color: isPendingCheck ? progressBarColor : Colors.green
-                ),
+                backgroundColor: isPendingCheck ? progressBarColor.withOpacity(0.1) : Colors.green.shade100,
+                child: Icon(p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet, color: isPendingCheck ? progressBarColor : Colors.green),
               ),
               title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("${p.date.toPersianDate()} ${p.description ?? ''}"),
-                  if (p.method == PaymentMethod.check)
-                    Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  if (p.method == PaymentMethod.check) Text("سررسید: ${p.checkDueDate?.toPersianDate() ?? ''}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
-              trailing: isPendingCheck 
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: progressBarColor, borderRadius: BorderRadius.circular(12)),
-                        child: Text(
-                          daysLeft <= 0 ? "امروز" : "$daysLeft روز مانده", 
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
-                        ),
-                      ),
-                    ],
-                  )
-                : const Icon(Icons.check_circle, color: Colors.green, size: 24),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (p.receiptImagePath != null || p.checkImagePath != null)
+                    IconButton(icon: const Icon(Icons.image_outlined, color: Colors.blueGrey), onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!)),
+                  if (isPendingCheck)
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: progressBarColor, borderRadius: BorderRadius.circular(12)), child: Text(daysLeft <= 0 ? "امروز" : "$daysLeft روز", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))
+                  else
+                    const Icon(Icons.check_circle, color: Colors.green, size: 24),
+                ],
+              ),
             ),
             if (isPendingCheck)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
-                        minHeight: 6,
-                      ),
-                    ),
-                  ],
-                ),
+                child: ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: progress, backgroundColor: Colors.grey.shade200, valueColor: AlwaysStoppedAnimation<Color>(progressBarColor), minHeight: 6)),
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showPaymentOptions(Payment p) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (p.method == PaymentMethod.check)
+              ListTile(leading: Icon(p.isCleared ? Icons.history : Icons.check_circle, color: Colors.blue), title: Text(p.isCleared ? "تغییر وضعیت به در جریان" : "تایید وصول چک"), onTap: () { Navigator.pop(context); _toggleCheckStatus(p); }),
+            ListTile(leading: const Icon(Icons.delete_forever, color: Colors.red), title: const Text("حذف کامل این تراکنش"), onTap: () { Navigator.pop(context); _showDeleteConfirm(p); }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirm(Payment p) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("حذف تراکنش"),
+        content: const Text("آیا از حذف دائمی این تراکنش اطمینان دارید؟"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("انصراف")),
+          ElevatedButton(onPressed: () { Navigator.pop(context); if (p.id != null) _deletePayment(p.id!); }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red), child: const Text("حذف")),
+        ],
       ),
     );
   }

@@ -20,7 +20,7 @@ class NotificationService {
   static Future<void> showNotification(int id, String title, String body) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'check_reminders',
-      'سررسید چک‌ها',
+      'یادآورهای خاتون بار',
       importance: Importance.max,
       priority: Priority.high,
     );
@@ -40,10 +40,10 @@ class NotificationService {
         final dueDate = DateTime(payment.checkDueDate!.year, payment.checkDueDate!.month, payment.checkDueDate!.day);
         final difference = dueDate.difference(now).inDays;
 
-        // یادآوری از ۵ روز قبل تا روز سررسید
         if (difference >= 0 && difference <= 5) {
           String title = '';
           String prefix = payment.type == PaymentType.toSeller ? "چک پرداختی به فروشنده" : "چک دریافتی از مشتری";
+          if (payment.type == PaymentType.toLogistics) prefix = "چک پرداختی به باربری";
           
           if (difference == 0) {
             title = 'سررسید $prefix امروز است';
@@ -55,6 +55,28 @@ class NotificationService {
             payment.id.hashCode,
             title,
             'مبلغ: ${AppFormatters.formatCurrency(payment.amount)} تومان - ${payment.description ?? ""}',
+          );
+        }
+      }
+    }
+  }
+
+  static Future<void> checkMaintenanceReminders() async {
+    final repository = ServiceRepository();
+    final maintenances = await repository.getMaintenances();
+    final now = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+    for (var m in maintenances) {
+      if (m.nextDate != null) {
+        final nextDate = DateTime(m.nextDate!.year, m.nextDate!.month, m.nextDate!.day);
+        final difference = nextDate.difference(now).inDays;
+
+        if (difference >= 0 && difference <= 3) {
+          String title = difference == 0 ? "زمان سرویس دوره‌ای فرا رسید" : "$difference روز تا موعد سرویس بعدی";
+          await showNotification(
+            m.id.hashCode + 1,
+            title,
+            "سرویس: ${m.type} برای خودرو مورد نظر",
           );
         }
       }

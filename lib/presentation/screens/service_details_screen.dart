@@ -42,16 +42,46 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
     setState(() {
       _currentService = allServices.firstWhere((s) => s.id == _currentService.id);
       
-      // اصلاح فیلتر: شامل تراکنش‌های مستقیم سرویس + تراکنش‌های کلی مشتری + تراکنش‌های کلی فروشنده
       _allRelatedPayments = allPayments.where((p) {
         bool isDirect = p.serviceId == _currentService.id;
         bool isGeneralCustomer = p.customerId != null && p.customerId == _currentService.customer?.id;
         bool isGeneralSeller = p.sellerId != null && p.sellerId == _currentService.seller.id;
-        return isDirect || isGeneralCustomer || isGeneralSeller;
+        bool isGeneralLogistics = p.logisticsId != null && p.logisticsId == _currentService.logisticsCo?.id;
+        return isDirect || isGeneralCustomer || isGeneralSeller || isGeneralLogistics;
       }).toList();
       
       _isLoading = false;
     });
+  }
+
+  Future<void> _toggleCheckStatus(Payment p) async {
+    final updatedPayment = Payment(
+      id: p.id,
+      serviceId: p.serviceId,
+      sellerId: p.sellerId,
+      customerId: p.customerId,
+      logisticsId: p.logisticsId,
+      myAccountId: p.myAccountId,
+      type: p.type,
+      method: p.method,
+      amount: p.amount,
+      date: p.date,
+      description: p.description,
+      receiptImagePath: p.receiptImagePath,
+      checkDueDate: p.checkDueDate,
+      checkImagePath: p.checkImagePath,
+      bankName: p.bankName,
+      checkNumber: p.checkNumber,
+      isCleared: !p.isCleared,
+    );
+
+    await DatabaseHelper.instance.insertPayment(updatedPayment);
+    _refreshData();
+  }
+
+  Future<void> _deletePayment(String id) async {
+    await DatabaseHelper.instance.delete('payments', id);
+    _refreshData();
   }
 
   @override
@@ -65,6 +95,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
           IconButton(
             onPressed: () => PdfService.generateAndPrintService(_currentService),
             icon: const Icon(Icons.print),
+            tooltip: 'چاپ فاکتور',
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -180,7 +211,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          _buildInfoSection('مشخصات', [
+          _buildInfoSection('مشخصات سرویس', [
             _buildInfoRow('کد سفارش', _currentService.orderCode.toPersianDigit(), isBold: true),
             _buildInfoRow('مشتری', _currentService.customer?.fullName ?? 'ثبت نشده'),
             _buildInfoRow('نوع بار', _currentService.loadType.name),
@@ -190,13 +221,25 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
               _buildInfoRow('باربری', _currentService.logisticsCo!.name),
           ]),
           const SizedBox(height: 16),
-          _buildInfoSection('مالی و اطلاعات واریز', [
-            _buildInfoRow('مجموع کرایه حمل', "${AppFormatters.formatCurrency(_currentService.totalTransportAmount)} تومان"),
-            if (_currentService.purchasePricePerTon > 0) ...[
-              _buildInfoRow('قیمت هر تن خرید', "${AppFormatters.formatCurrency(_currentService.purchasePricePerTon)} تومان"),
-              _buildInfoRow('جمع کل خرید', "${AppFormatters.formatCurrency(_currentService.totalPurchaseAmount)} تومان"),
-            ],
+          _buildInfoSection('وضعیت تسویه مشتری', [
+            _buildInfoRow('جمع کل فاکتور مشتری', "${AppFormatters.formatCurrency(_currentService.totalServicePriceForCustomer)} تومان"),
+            _buildInfoRow('دریافتی نقد/وصول شده', "${AppFormatters.formatCurrency(_currentService.totalCollectedFromCustomer)} تومان", color: Colors.green),
+            _buildInfoRow('چک در جریان مشتری', "${AppFormatters.formatCurrency(_currentService.pendingCustomerChecks)} تومان", color: Colors.orange),
             const Divider(),
+            _buildInfoRow('مانده بدهی نهایی مشتری', "${AppFormatters.formatCurrency(_currentService.finalBalanceCustomerDebt)} تومان", isBold: true, color: _currentService.finalBalanceCustomerDebt > 0 ? Colors.red : Colors.green),
+          ]),
+          if (_currentService.purchasePricePerTon > 0) ...[
+            const SizedBox(height: 16),
+            _buildInfoSection('وضعیت تسویه با فروشنده', [
+              _buildInfoRow('جمع کل خرید از فروشنده', "${AppFormatters.formatCurrency(_currentService.totalPurchaseAmount)} تومان"),
+              _buildInfoRow('پرداختی نقد/وصول شده', "${AppFormatters.formatCurrency(_currentService.totalPaidToSeller)} تومان", color: Colors.green),
+              _buildInfoRow('چک معلق ما نزد فروشنده', "${AppFormatters.formatCurrency(_currentService.pendingSellerChecks)} تومان", color: Colors.orange),
+              const Divider(),
+              _buildInfoRow('مانده بدهی نهایی ما', "${AppFormatters.formatCurrency(_currentService.finalBalanceToSeller)} تومان", isBold: true, color: _currentService.finalBalanceToSeller > 0 ? Colors.red : Colors.green),
+            ]),
+          ],
+          const SizedBox(height: 16),
+          _buildInfoSection('اطلاعات تکمیلی و سود', [
             if (_currentService.fareAccountNumber != null && _currentService.fareAccountNumber!.isNotEmpty) ...[
               const Text('اطلاعات حساب واریز کرایه:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
               _buildInfoRow('شماره حساب/کارت', _currentService.fareAccountNumber!.toPersianDigit()),
@@ -204,7 +247,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
               _buildInfoRow('بانک', _currentService.fareBankName ?? "---"),
               const Divider(),
             ],
-            _buildInfoRow('سود خالص سرویس', "${AppFormatters.formatCurrency(_currentService.netProfit)} تومان", isBold: true, color: Colors.green),
+            _buildInfoRow('سود خالص این سرویس', "${AppFormatters.formatCurrency(_currentService.netProfit)} تومان", isBold: true, color: Colors.green),
             if (_currentService.purchaseInvoiceImagePath != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -224,6 +267,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
   Widget _buildPaymentsTab() {
     final customerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.fromCustomer).toList();
     final sellerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.toSeller).toList();
+    final logisticsPayments = _allRelatedPayments.where((p) => p.type == PaymentType.toLogistics).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -232,6 +276,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
         const SizedBox(height: 24),
         if (_currentService.purchasePricePerTon > 0)
           _buildPaymentListSection('تراکنش‌های مربوط به فروشنده', sellerPayments, Colors.red),
+        const SizedBox(height: 24),
+        if (_currentService.logisticsCo != null || _currentService.expenses.owedToLogistics > 0)
+          _buildPaymentListSection('تراکنش‌های مربوط به باربری', logisticsPayments, Colors.orange),
+        const SizedBox(height: 80),
       ],
     );
   }
@@ -246,7 +294,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('حذف سرویس'),
-        content: const Text('آیا مطمئن هستید؟'),
+        content: const Text('آیا مطمئن هستید؟ تمام تراکنش‌های ثبت شده برای این سرویس نیز حذف خواهند شد.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
           TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('حذف')),
@@ -284,6 +332,8 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
             ListTile(leading: const Icon(Icons.add_chart, color: Colors.blue), title: const Text('دریافتی از مشتری'), onTap: () => _navToAddPayment(true)),
             if (_currentService.purchasePricePerTon > 0)
               ListTile(leading: const Icon(Icons.payments_outlined, color: Colors.red), title: const Text('پرداختی به فروشنده'), onTap: () => _navToAddPayment(false)),
+            if (_currentService.logisticsCo != null)
+              ListTile(leading: const Icon(Icons.business_outlined, color: Colors.orange), title: const Text('پرداختی به باربری'), onTap: () => _navToAddPayment(false, isLogistics: true)),
             ListTile(leading: const Icon(Icons.receipt_long, color: Colors.orange), title: const Text('ثبت هزینه جانبی'), onTap: () {
               Navigator.pop(context);
               _addExpenseToService();
@@ -370,9 +420,18 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
     }
   }
 
-  void _navToAddPayment(bool isCollection) async {
+  void _navToAddPayment(bool isCollection, {bool isLogistics = false}) async {
     Navigator.pop(context);
-    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => AddPaymentScreen(service: _currentService, isCollection: isCollection)));
+    final result = await Navigator.push(
+      context, 
+      MaterialPageRoute(
+        builder: (context) => AddPaymentScreen(
+          service: _currentService, 
+          isCollection: isCollection,
+          customLogisticsId: isLogistics ? _currentService.logisticsCo?.id : null,
+        )
+      )
+    );
     if (result == true) _refreshData();
   }
 
@@ -387,9 +446,10 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
           elevation: p.serviceId == _currentService.id ? 2 : 0, 
           color: p.serviceId == _currentService.id ? Colors.white : Colors.grey.shade50,
           child: ListTile(
+            onLongPress: () => _showPaymentOptions(p),
             leading: Icon(
               p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet,
-              color: color,
+              color: p.method == PaymentMethod.check && !p.isCleared ? Colors.orange : color,
             ),
             title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Column(
@@ -404,15 +464,74 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
                   const Text("(تراکنش کلی مربوط به طرف حساب)", style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic)),
               ],
             ),
-            trailing: p.receiptImagePath != null || p.checkImagePath != null 
-              ? IconButton(
-                  icon: const Icon(Icons.image_outlined),
-                  onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!, 'تصویر رسید/چک'),
-                )
-              : (p.method == PaymentMethod.check && !p.isCleared ? const Icon(Icons.pending, color: Colors.orange, size: 20) : null),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (p.receiptImagePath != null || p.checkImagePath != null)
+                  IconButton(
+                    icon: const Icon(Icons.image_outlined, color: Colors.blueGrey),
+                    onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!, 'تصویر رسید/چک'),
+                  ),
+                if (p.method == PaymentMethod.check && !p.isCleared) 
+                  const Icon(Icons.pending, color: Colors.orange, size: 20)
+                else if (p.isCleared)
+                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              ],
+            ),
           ),
         )).toList(),
       ],
+    );
+  }
+
+  void _showPaymentOptions(Payment p) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (p.method == PaymentMethod.check)
+              ListTile(
+                leading: Icon(p.isCleared ? Icons.history : Icons.check_circle, color: Colors.blue),
+                title: Text(p.isCleared ? "تغییر وضعیت به در جریان" : "تایید وصول چک"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleCheckStatus(p);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.red),
+              title: const Text("حذف کامل این تراکنش"),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteConfirm(p);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteConfirm(Payment p) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("حذف تراکنش"),
+        content: const Text("آیا از حذف دائمی این تراکنش اطمینان دارید؟ این عمل قابل بازگشت نیست."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("انصراف")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              if (p.id != null) _deletePayment(p.id!);
+            }, 
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("حذف نهایی")
+          ),
+        ],
+      ),
     );
   }
 
