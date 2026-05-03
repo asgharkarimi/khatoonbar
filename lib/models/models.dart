@@ -450,6 +450,7 @@ class ServiceExpenses {
 
 enum PaymentType { toSeller, fromCustomer, toLogistics, toDriver }
 enum PaymentMethod { cash, check, card, sheba }
+enum CheckStatus { pending, cleared, bounced, transferred }
 
 class Payment {
   final String? id;
@@ -469,7 +470,10 @@ class Payment {
   final String? checkImagePath;
   final String? bankName;
   final String? checkNumber;
-  final bool isCleared;
+  final bool isCleared; // Keeping for compatibility, but prefer using status
+  final CheckStatus status;
+  final int graceDays;
+  final String? transferredToId; // ID of Seller or Entity the check was given to
 
   Payment({
     this.id,
@@ -490,7 +494,12 @@ class Payment {
     this.bankName,
     this.checkNumber,
     this.isCleared = true,
+    this.status = CheckStatus.cleared,
+    this.graceDays = 0,
+    this.transferredToId,
   });
+
+  DateTime? get effectiveCheckDueDate => checkDueDate?.add(Duration(days: graceDays));
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -511,6 +520,9 @@ class Payment {
     'bankName': bankName,
     'checkNumber': checkNumber,
     'isCleared': isCleared,
+    'status': status.index,
+    'graceDays': graceDays,
+    'transferredToId': transferredToId,
   };
 
   factory Payment.fromMap(Map<String, dynamic> map) => Payment(
@@ -532,6 +544,9 @@ class Payment {
     bankName: map['bankName'],
     checkNumber: map['checkNumber'],
     isCleared: map['isCleared'] ?? true,
+    status: map['status'] != null ? CheckStatus.values[map['status']] : (map['isCleared'] == false ? CheckStatus.pending : CheckStatus.cleared),
+    graceDays: map['graceDays'] ?? 0,
+    transferredToId: map['transferredToId'],
   );
 }
 
@@ -595,11 +610,11 @@ class LoadService {
   double get totalPurchaseAmount => weight * purchasePricePerTon;
   
   double get totalPaidToSeller => paymentsToSeller
-      .where((p) => p.isCleared)
+      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
       .fold(0.0, (sum, item) => sum + item.amount);
       
   double get pendingSellerChecks => paymentsToSeller
-      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get remainingDebtToSeller => totalPurchaseAmount - totalPaidToSeller;
@@ -609,33 +624,33 @@ class LoadService {
   double get totalServicePriceForCustomer => totalPurchaseAmount + totalTransportAmount;
   
   double get totalCollectedFromCustomer => collectionsFromCustomer
-      .where((p) => p.isCleared)
+      .where((p) => p.status == CheckStatus.cleared || p.status == CheckStatus.transferred || p.method != PaymentMethod.check)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get pendingCustomerChecks => collectionsFromCustomer
-      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get remainingCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer;
   double get finalBalanceCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer - pendingCustomerChecks;
 
   double get totalPaidToLogistics => paymentsToLogistics
-      .where((p) => p.isCleared)
+      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
       .fold(0.0, (sum, item) => sum + item.amount);
       
   double get pendingLogisticsChecks => paymentsToLogistics
-      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get remainingLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics;
   double get finalBalanceLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics - pendingLogisticsChecks;
 
   double get totalPaidToDriver => paymentsToDriver
-      .where((p) => p.isCleared)
+      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get pendingDriverChecks => paymentsToDriver
-      .where((p) => p.method == PaymentMethod.check && !p.isCleared)
+      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
       .fold(0.0, (sum, item) => sum + item.amount);
 
   double get netProfit => totalTransportAmount - expenses.total;

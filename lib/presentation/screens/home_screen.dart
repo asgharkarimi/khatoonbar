@@ -7,7 +7,6 @@ import '../../models/models.dart';
 import 'add_service_screen.dart';
 import 'service_details_screen.dart';
 import 'services_screen.dart';
-import 'ledger_hub_screen.dart';
 
 enum HomeServiceFilter { all, today, week, month }
 
@@ -26,11 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   HomeServiceFilter _activeFilter = HomeServiceFilter.all;
 
-  double _totalCustomerDebt = 0;
-  double _totalSellerDebt = 0;
-  double _totalLogisticsDebt = 0;
-  double _cashBalance = 0;
-
   @override
   void initState() {
     super.initState();
@@ -44,11 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final services = await _repository.getAllServices();
       final allPayments = await _repository.getPayments();
       
-      _totalCustomerDebt = await _repository.getTotalUnpaidCustomerDebts();
-      _totalSellerDebt = await _repository.getTotalUnpaidSellerDebts();
-      _totalLogisticsDebt = await _repository.getTotalUnpaidLogisticsDebts();
-      _cashBalance = await _repository.getCurrentCashBalance();
-
       final now = DateTime.now();
       final upcoming = allPayments.where((p) {
         if (p.method == PaymentMethod.check && !p.isCleared && p.checkDueDate != null) {
@@ -172,14 +161,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSummaryCard(theme),
-                    
                     if (_upcomingChecks.isNotEmpty) ...[
-                      const SizedBox(height: 24),
                       _buildUpcomingChecksSection(theme),
+                      const SizedBox(height: 24),
                     ],
 
-                    const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -315,7 +301,6 @@ class _HomeScreenState extends State<HomeScreen> {
               return Container(
                 width: 260,
                 margin: const EdgeInsets.only(left: 12),
-                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -324,133 +309,98 @@ class _HomeScreenState extends State<HomeScreen> {
                     BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 2)),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            AppFormatters.formatCurrency(check.amount),
-                            style: TextStyle(fontWeight: FontWeight.bold, color: progressBarColor, fontSize: 16),
-                          ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        if (check.serviceId != null) {
+                          try {
+                            final service = _allServices.firstWhere((s) => s.id == check.serviceId);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: service)),
+                            ).then((_) => _loadData());
+                          } catch (_) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('سرویس مربوط به این چک یافت نشد')),
+                            );
+                          }
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('این چک به سرویس خاصی متصل نیست')),
+                          );
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    AppFormatters.formatCurrency(check.amount),
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: progressBarColor, fontSize: 16),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _confirmClearance(check),
+                                  icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 24),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              "$typeLabel - ${check.description ?? "بدون توضیح"}",
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                backgroundColor: Colors.grey.shade100,
+                                valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
+                                minHeight: 8,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "سررسید: ${check.checkDueDate!.toPersianDate()}",
+                                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+                                ),
+                                Text(
+                                  difference <= 0 ? "امروز" : "$difference روز مانده",
+                                  style: TextStyle(
+                                    color: progressBarColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        IconButton(
-                          onPressed: () => _confirmClearance(check),
-                          icon: const Icon(Icons.check_circle_outline, color: Colors.green, size: 24),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      "$typeLabel - ${check.description ?? "بدون توضیح"}",
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: Colors.grey.shade100,
-                        valueColor: AlwaysStoppedAnimation<Color>(progressBarColor),
-                        minHeight: 8,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "سررسید: ${check.checkDueDate!.toPersianDate()}",
-                          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          difference <= 0 ? "امروز" : "$difference روز مانده",
-                          style: TextStyle(
-                            color: progressBarColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               );
             },
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSummaryCard(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _summaryItem('موجودی صندوق', _cashBalance, Colors.green.shade800, theme, null),
-              _summaryItem('طلب از بازار', _totalCustomerDebt, Colors.blue.shade800, theme, 0),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: Color(0xFFF2F4F7)),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _summaryItem('بدهی فروشندگان', _totalSellerDebt, Colors.red.shade800, theme, 1),
-              _summaryItem('بدهی باربری‌ها', _totalLogisticsDebt, Colors.orange.shade800, theme, 2),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryItem(String label, double amount, Color color, ThemeData theme, int? tabIndex) {
-    return InkWell(
-      onTap: tabIndex != null ? () async {
-        await Navigator.push(context, MaterialPageRoute(builder: (context) => LedgerHubScreen(initialTab: tabIndex)));
-        _loadData();
-      } : null,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: theme.textTheme.labelSmall?.copyWith(color: Colors.grey.shade600)),
-            const SizedBox(height: 4),
-            Text(
-              AppFormatters.formatCurrency(amount),
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

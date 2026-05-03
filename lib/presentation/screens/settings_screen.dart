@@ -7,6 +7,8 @@ import 'settings/manage_customers_screen.dart';
 import 'settings/manage_car_expenses_screen.dart';
 import 'settings/manage_logistics_cos_screen.dart';
 import 'settings/manage_bank_accounts_screen.dart';
+import 'settings/manage_services_screen.dart';
+import 'settings/manage_checks_screen.dart';
 import 'maintenance_screen.dart';
 import 'transaction_history_screen.dart';
 import '../../core/utils/backup_service.dart';
@@ -21,29 +23,25 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Center(
+          const Center(
             child: Column(
               children: [
-                Image.asset(
-                  'assets/images/khatoon_logo.png',
-                  height: 100,
-                ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: 16),
+                Text(
                   'خاتون بار',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const Text(
+                Text(
                   'نسخه 1.1.0',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
                   ),
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: 24),
               ],
             ),
           ),
@@ -56,6 +54,22 @@ class SettingsScreen extends StatelessWidget {
             highlightColor: Colors.deepPurple,
           ),
           const Divider(height: 32),
+          _buildSettingItem(
+            context,
+            'مدیریت سرویس‌ها',
+            'ویرایش یا حذف سرویس‌های ثبت شده',
+            Icons.edit_note,
+            const ManageServicesScreen(),
+            highlightColor: Colors.blue,
+          ),
+          _buildSettingItem(
+            context,
+            'مدیریت و عملیات چک‌ها',
+            'وصول، برگشت و واگذاری چک به دیگران',
+            Icons.account_balance,
+            const ManageChecksScreen(),
+            highlightColor: Colors.amber.shade700,
+          ),
           _buildSettingItem(
             context,
             'مدیریت حساب‌های بانکی من',

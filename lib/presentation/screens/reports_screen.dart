@@ -89,6 +89,10 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     }
   }
 
+  bool _isSameDay(Jalali a, Jalali b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   void _exportToPdf() async {
     String title = "";
     List<String> headers = [];
@@ -136,7 +140,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
     } else if (_tabController.index == 3) {
       title = "لیست چک‌های تاریخ ${_selectedDate.formatFullDate()}";
       headers = ["ردیف", "طرف حساب", "مبلغ", "نوع", "وضعیت"];
-      final dayChecks = _allPayments.where((p) => p.method == PaymentMethod.check && p.checkDueDate != null && Jalali.fromDateTime(p.checkDueDate!) == _selectedDate).toList();
+      final dayChecks = _allPayments.where((p) => p.method == PaymentMethod.check && p.checkDueDate != null && _isSameDay(Jalali.fromDateTime(p.checkDueDate!), _selectedDate)).toList();
       int i = 1;
       for (var c in dayChecks) {
         data.add([(i++).toString().toPersianDigit(), _getTargetName(c), AppFormatters.formatCurrency(c.amount), _getPaymentTypeLabel(c.type), c.isCleared ? "وصول شده" : "در انتظار"]);
@@ -165,16 +169,52 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
 
   String _getTargetName(Payment p) {
     if (p.type == PaymentType.fromCustomer) {
-      final c = _customers.firstWhere((c) => c.id == p.customerId, orElse: () => Customer(id: '', firstName: 'نامشخص', lastName: '', phone: ''));
+      final c = _customers.firstWhere(
+        (c) => c.id == p.customerId, 
+        orElse: () {
+          if (p.serviceId != null) {
+            final s = _services.where((s) => s.id == p.serviceId);
+            if (s.isNotEmpty && s.first.customer != null) return s.first.customer!;
+          }
+          return Customer(id: '', firstName: 'نامشخص', lastName: '', phone: '');
+        }
+      );
       return c.fullName;
     } else if (p.type == PaymentType.toSeller) {
-      final s = _sellers.firstWhere((s) => s.id == p.sellerId, orElse: () => Seller(id: '', name: 'نامشخص', product: ''));
+      final s = _sellers.firstWhere(
+        (s) => s.id == p.sellerId, 
+        orElse: () {
+          if (p.serviceId != null) {
+            final service = _services.where((ser) => ser.id == p.serviceId);
+            if (service.isNotEmpty) return service.first.seller;
+          }
+          return Seller(id: '', name: 'نامشخص', product: '');
+        }
+      );
       return s.name;
     } else if (p.type == PaymentType.toLogistics) {
-      final l = _logisticsCos.firstWhere((l) => l.id == p.logisticsId, orElse: () => LogisticsCo(id: '', name: 'نامشخص', phone: ''));
+      final l = _logisticsCos.firstWhere(
+        (l) => l.id == p.logisticsId, 
+        orElse: () {
+          if (p.serviceId != null) {
+            final service = _services.where((ser) => ser.id == p.serviceId);
+            if (service.isNotEmpty && service.first.logisticsCo != null) return service.first.logisticsCo!;
+          }
+          return LogisticsCo(id: '', name: 'نامشخص', phone: '');
+        }
+      );
       return l.name;
     } else {
-      final d = _drivers.firstWhere((d) => d.id == p.driverId, orElse: () => Driver(id: '', firstName: 'نامشخص', lastName: '', phone: ''));
+      final d = _drivers.firstWhere(
+        (d) => d.id == p.driverId, 
+        orElse: () {
+          if (p.serviceId != null) {
+            final service = _services.where((ser) => ser.id == p.serviceId);
+            if (service.isNotEmpty) return service.first.driver;
+          }
+          return Driver(id: '', firstName: 'نامشخص', lastName: '', phone: '');
+        }
+      );
       return d.fullName;
     }
   }
@@ -201,7 +241,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
+          labelPadding: EdgeInsets.zero,
+          indicatorSize: TabBarIndicatorSize.tab,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.group_outlined)),
             Tab(text: 'فروشندگان', icon: Icon(Icons.storefront_outlined)),
@@ -329,7 +371,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
 
   Widget _buildChecksTab() {
     final allChecks = _allPayments.where((p) => p.method == PaymentMethod.check).toList();
-    final dayChecks = allChecks.where((c) => c.checkDueDate != null && Jalali.fromDateTime(c.checkDueDate!) == _selectedDate).toList();
+    final dayChecks = allChecks.where((c) => c.checkDueDate != null && _isSameDay(Jalali.fromDateTime(c.checkDueDate!), _selectedDate)).toList();
 
     return Column(
       children: [
@@ -348,6 +390,7 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
   }
 
   Widget _buildCustomCalendar(List<Payment> allChecks) {
+    final today = Jalali.now();
     return Container(
       padding: const EdgeInsets.all(8),
       color: Colors.white,
@@ -357,9 +400,31 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(onPressed: () => setState(() => _viewMonth = _viewMonth.addMonths(-1)), icon: const Icon(Icons.chevron_left)),
-              Text("${_viewMonth.formatter.mN} ${_viewMonth.year}".toPersianDigit(), style: const TextStyle(fontWeight: FontWeight.bold)),
+              Column(
+                children: [
+                  Text("${_viewMonth.formatter.mN} ${_viewMonth.year}".toPersianDigit(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  InkWell(
+                    onTap: () => setState(() {
+                      _selectedDate = Jalali.now();
+                      _viewMonth = Jalali.now();
+                    }),
+                    child: Text(
+                      "امروز: ${today.formatter.d} ${today.formatter.mN}".toPersianDigit(),
+                      style: TextStyle(fontSize: 10, color: Colors.teal.shade700, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
               IconButton(onPressed: () => setState(() => _viewMonth = _viewMonth.addMonths(1)), icon: const Icon(Icons.chevron_right)),
             ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map((day) => Text(day, style: const TextStyle(fontSize: 10, color: Colors.grey))).toList(),
+            ),
           ),
           GridView.builder(
             shrinkWrap: true,
@@ -371,8 +436,9 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
               if (index < dayOffset) return const SizedBox();
               int day = index - dayOffset + 1;
               Jalali currentDay = _viewMonth.copy(day: day);
-              bool isSelected = currentDay == _selectedDate;
-              bool hasCheck = allChecks.any((c) => c.checkDueDate != null && Jalali.fromDateTime(c.checkDueDate!) == currentDay);
+              bool isSelected = _isSameDay(currentDay, _selectedDate);
+              bool isToday = _isSameDay(currentDay, today);
+              bool hasCheck = allChecks.any((c) => c.checkDueDate != null && _isSameDay(Jalali.fromDateTime(c.checkDueDate!), currentDay));
 
               return GestureDetector(
                 onTap: () => setState(() => _selectedDate = currentDay),
@@ -380,11 +446,25 @@ class _ReportsScreenState extends State<ReportsScreen> with SingleTickerProvider
                   alignment: Alignment.center,
                   margin: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.blue : (hasCheck ? Colors.orange.shade50 : Colors.transparent),
+                    color: isSelected 
+                        ? Colors.blue 
+                        : (hasCheck ? Colors.amber.shade100 : (isToday ? Colors.teal.shade50 : Colors.transparent)),
                     borderRadius: BorderRadius.circular(8),
-                    border: hasCheck ? Border.all(color: Colors.orange.shade200) : null,
+                    border: isSelected 
+                        ? null 
+                        : (hasCheck 
+                            ? Border.all(color: Colors.amber.shade700, width: 1.5) 
+                            : (isToday ? Border.all(color: Colors.teal, width: 1.5) : null)),
                   ),
-                  child: Text("$day".toPersianDigit(), style: TextStyle(color: isSelected ? Colors.white : Colors.black, fontWeight: isSelected ? FontWeight.bold : null)),
+                  child: Text(
+                    "$day".toPersianDigit(), 
+                    style: TextStyle(
+                      color: isSelected 
+                          ? Colors.white 
+                          : (hasCheck ? Colors.amber.shade900 : (isToday ? Colors.teal.shade900 : Colors.black)), 
+                      fontWeight: (isSelected || hasCheck || isToday) ? FontWeight.bold : null
+                    )
+                  ),
                 ),
               );
             },

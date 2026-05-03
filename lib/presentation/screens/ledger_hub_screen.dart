@@ -24,10 +24,10 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   List<LogisticsCo> _logisticsCos = [];
   List<Driver> _drivers = [];
   
-  Map<String, double> _customerBalances = {};
-  Map<String, double> _sellerBalances = {};
-  Map<String, double> _logisticsBalances = {};
-  Map<String, double> _driverBalances = {};
+  final Map<String, double> _customerBalances = {};
+  final Map<String, double> _sellerBalances = {};
+  final Map<String, double> _logisticsBalances = {};
+  final Map<String, double> _driverBalances = {};
   
   List<Customer> _filteredCustomers = [];
   List<Seller> _filteredSellers = [];
@@ -116,7 +116,9 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
         title: const Text('دفتر حساب و مالی'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
+          labelPadding: EdgeInsets.zero,
+          indicatorSize: TabBarIndicatorSize.tab,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.people)),
             Tab(text: 'فروشندگان', icon: Icon(Icons.storefront)),
@@ -295,7 +297,7 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           child: Icon(icon, color: color),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),

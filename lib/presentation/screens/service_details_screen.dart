@@ -184,6 +184,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
           ),
         const Divider(height: 32),
         _buildInfoRow('جمع کل هزینه‌ها', "${AppFormatters.formatCurrency(exp.total)} تومان", isBold: true, color: Colors.red),
+        const SizedBox(height: 80),
       ],
     );
   }
@@ -259,6 +260,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
                 ),
               ),
           ]),
+          const SizedBox(height: 80),
         ],
       ),
     );
