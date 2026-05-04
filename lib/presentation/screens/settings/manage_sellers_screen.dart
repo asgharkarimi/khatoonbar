@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
 
 class ManageSellersScreen extends StatefulWidget {
@@ -142,8 +143,17 @@ class _ManageSellersScreenState extends State<ManageSellersScreen> {
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await DatabaseHelper.instance.delete('sellers', seller.id);
-                                  _refreshSellers();
+                                  bool authenticated = await BiometricHelper.authenticate(
+                                    reason: 'تایید هویت برای حذف فروشنده ${seller.name}'
+                                  );
+                                  if (authenticated) {
+                                    await DatabaseHelper.instance.delete('sellers', seller.id);
+                                    _refreshSellers();
+                                  } else {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('عدم تایید هویت. حذف لغو شد.')));
+                                    }
+                                  }
                                 }
                               },
                             ),

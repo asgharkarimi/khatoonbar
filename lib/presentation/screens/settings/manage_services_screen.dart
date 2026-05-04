@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
 import '../../../core/data/service_repository.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
 import '../add_service_screen.dart';
 
@@ -46,10 +47,21 @@ class _ManageServicesScreenState extends State<ManageServicesScreen> {
     );
 
     if (confirm == true) {
-      await _repository.deleteService(service.id);
-      _refreshServices();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سرویس با موفقیت حذف شد')));
+      // احراز هویت بیومتریک قبل از حذف قطعی
+      bool authenticated = await BiometricHelper.authenticate(
+        reason: 'تایید هویت برای حذف سرویس ${service.orderCode}'
+      );
+
+      if (authenticated) {
+        await _repository.deleteService(service.id);
+        _refreshServices();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('سرویس با موفقیت حذف شد')));
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('عدم تایید هویت. عملیات حذف لغو شد.')));
+        }
       }
     }
   }

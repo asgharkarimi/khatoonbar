@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
 import '../../widgets/phone_input.dart';
 
@@ -148,8 +149,17 @@ class _ManageDriversScreenState extends State<ManageDriversScreen> {
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await DatabaseHelper.instance.delete('drivers', driver.id);
-                                  _refreshDrivers();
+                                  bool authenticated = await BiometricHelper.authenticate(
+                                    reason: 'تایید هویت برای حذف راننده ${driver.fullName}'
+                                  );
+                                  if (authenticated) {
+                                    await DatabaseHelper.instance.delete('drivers', driver.id);
+                                    _refreshDrivers();
+                                  } else {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('عدم تایید هویت. حذف لغو شد.')));
+                                    }
+                                  }
                                 }
                               },
                             ),

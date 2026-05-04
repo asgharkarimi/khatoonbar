@@ -3,6 +3,7 @@ import 'package:persian_number_utility/persian_number_utility.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
 import '../../widgets/amount_input.dart';
 
@@ -296,8 +297,17 @@ class _ManageChecksScreenState extends State<ManageChecksScreen> {
                           )
                         );
                         if (confirm == true) {
-                          await DatabaseHelper.instance.delete('payments', p.id!); 
-                          _loadData();
+                          bool authenticated = await BiometricHelper.authenticate(
+                            reason: 'تایید هویت برای حذف چک به مبلغ ${AppFormatters.formatCurrency(p.amount)}'
+                          );
+                          if (authenticated) {
+                            await DatabaseHelper.instance.delete('payments', p.id!); 
+                            _loadData();
+                          } else {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('عدم تایید هویت. حذف لغو شد.')));
+                            }
+                          }
                         }
                       }),
                     ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
 import '../../widgets/iranian_plate_input.dart';
 import '../../widgets/plate_widget.dart';
@@ -141,8 +142,17 @@ class _ManageCarsScreenState extends State<ManageCarsScreen> {
                                   );
 
                                   if (confirm == true) {
-                                    await DatabaseHelper.instance.delete('cars', car.id);
-                                    _refreshCars();
+                                    bool authenticated = await BiometricHelper.authenticate(
+                                      reason: 'تایید هویت برای حذف ماشین ${car.name}'
+                                    );
+                                    if (authenticated) {
+                                      await DatabaseHelper.instance.delete('cars', car.id);
+                                      _refreshCars();
+                                    } else {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('عدم تایید هویت. حذف لغو شد.')));
+                                      }
+                                    }
                                   }
                                 },
                               ),
