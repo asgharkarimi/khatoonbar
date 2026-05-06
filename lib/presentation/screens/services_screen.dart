@@ -24,6 +24,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
   ServiceFilter _activeFilter = ServiceFilter.all;
   DateTime? _customDate;
 
+  Customer? _selectedCustomer;
+  Seller? _selectedSeller;
+  String? _selectedLogistics;
+
   @override
   void initState() {
     super.initState();
@@ -53,9 +57,22 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final now = DateTime.now();
     setState(() {
       _filteredServices = _allServices.where((service) {
-        final searchIn = "${service.driver.fullName} ${service.customer?.fullName ?? ''} ${service.loadType.name} ${service.origin} ${service.destination} ${service.orderCode}".toLowerCase();
+        // ۱. جستجوی متنی در تمامی فیلدها
+        final searchIn = [
+          service.driver.fullName,
+          service.customer?.fullName ?? '',
+          service.seller.name,
+          service.loadType.name,
+          service.origin,
+          service.destination,
+          service.orderCode,
+          service.logisticsCo?.name ?? '',
+          service.logisticsName ?? '',
+        ].join(' ').toLowerCase();
+
         bool matchesSearch = searchIn.contains(_searchQuery.toLowerCase());
 
+        // ۲. فیلتر زمانی
         bool matchesTime = true;
         if (_activeFilter == ServiceFilter.today) {
           matchesTime = service.date.year == now.year && service.date.month == now.month && service.date.day == now.day;
@@ -68,7 +85,13 @@ class _ServicesScreenState extends State<ServicesScreen> {
           matchesTime = service.date.year == _customDate!.year && service.date.month == _customDate!.month && service.date.day == _customDate!.day;
         }
 
-        return matchesSearch && matchesTime;
+        // ۳. فیلترهای انتخابی از منو
+        bool matchesCustomer = _selectedCustomer == null || service.customer?.id == _selectedCustomer!.id;
+        bool matchesSeller = _selectedSeller == null || service.seller.id == _selectedSeller!.id;
+        bool matchesLogistics = _selectedLogistics == null ||
+            (service.logisticsCo?.name == _selectedLogistics || service.logisticsName == _selectedLogistics);
+
+        return matchesSearch && matchesTime && matchesCustomer && matchesSeller && matchesLogistics;
       }).toList();
     });
   }
@@ -83,7 +106,36 @@ class _ServicesScreenState extends State<ServicesScreen> {
             icon: const Icon(Icons.calendar_month),
             onPressed: _pickCustomDate,
             tooltip: 'انتخاب تاریخ خاص',
-          )
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'جستجو و فیلتر پیشرفته',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (val) {
+              if (val == 'date') _pickCustomDate();
+              else if (val == 'customer') _showEntityPicker('customer');
+              else if (val == 'seller') _showEntityPicker('seller');
+              else if (val == 'logistics') _showEntityPicker('logistics');
+              else if (val == 'clear') {
+                setState(() {
+                  _activeFilter = ServiceFilter.all;
+                  _customDate = null;
+                  _selectedCustomer = null;
+                  _selectedSeller = null;
+                  _selectedLogistics = null;
+                  _searchQuery = "";
+                  _applyFilters();
+                });
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'date', child: ListTile(leading: Icon(Icons.calendar_month_outlined), title: Text('جستجو با تاریخ'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(value: 'customer', child: ListTile(leading: Icon(Icons.person_outline), title: Text('جستجو با نام گیرنده'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(value: 'seller', child: ListTile(leading: Icon(Icons.storefront_outlined), title: Text('جستجو با نام فرستنده'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(value: 'logistics', child: ListTile(leading: Icon(Icons.business_outlined), title: Text('جستجو با نام باربری'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'clear', child: ListTile(leading: Icon(Icons.filter_alt_off_outlined), title: Text('حذف تمام فیلترها'), contentPadding: EdgeInsets.zero)),
+            ],
+          ),
         ],
       ),
       body: Column(
@@ -133,7 +185,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
           _applyFilters();
         },
         decoration: InputDecoration(
-          hintText: 'جستجو در راننده، مشتری، بار یا مسیر...',
+          hintText: 'جستجو در راننده، مشتری، فروشنده، باربری...',
           prefixIcon: const Icon(Icons.search),
           contentPadding: const EdgeInsets.symmetric(vertical: 0),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -154,6 +206,12 @@ class _ServicesScreenState extends State<ServicesScreen> {
           _filterChip(ServiceFilter.month, 'این ماه'),
           if (_activeFilter == ServiceFilter.custom && _customDate != null)
             _filterChip(ServiceFilter.custom, _customDate!.toPersianDate()),
+          if (_selectedCustomer != null)
+            _entityChip('گیرنده: ${_selectedCustomer!.fullName}', () => setState(() { _selectedCustomer = null; _applyFilters(); })),
+          if (_selectedSeller != null)
+            _entityChip('فرستنده: ${_selectedSeller!.name}', () => setState(() { _selectedSeller = null; _applyFilters(); })),
+          if (_selectedLogistics != null)
+            _entityChip('باربری: $_selectedLogistics', () => setState(() { _selectedLogistics = null; _applyFilters(); })),
         ],
       ),
     );
@@ -174,6 +232,83 @@ class _ServicesScreenState extends State<ServicesScreen> {
             _applyFilters();
           });
         },
+      ),
+    );
+  }
+
+  Widget _entityChip(String label, VoidCallback onDeleted) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Chip(
+        label: Text(label, style: const TextStyle(fontSize: 10)),
+        deleteIcon: const Icon(Icons.close, size: 14),
+        onDeleted: onDeleted,
+        backgroundColor: Colors.blue.shade50,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.all(4),
+      ),
+    );
+  }
+
+  void _showEntityPicker(String type) {
+    List<dynamic> items = [];
+    String title = "";
+
+    if (type == 'customer') {
+      title = "انتخاب گیرنده (مشتری)";
+      items = _allServices.map((s) => s.customer).whereType<Customer>().toSet().toList();
+    } else if (type == 'seller') {
+      title = "انتخاب فرستنده (فروشنده)";
+      items = _allServices.map((s) => s.seller).toSet().toList();
+    } else if (type == 'logistics') {
+      title = "انتخاب باربری";
+      items = _allServices.map((s) => s.logisticsCo?.name ?? s.logisticsName).whereType<String>().where((s) => s.isNotEmpty).toSet().toList();
+    }
+
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('دیتایی برای این فیلتر یافت نشد')));
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ),
+          const Divider(),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                String name = "";
+                if (item is Customer) name = item.fullName;
+                else if (item is Seller) name = item.name;
+                else if (item is String) name = item;
+
+                return ListTile(
+                  title: Text(name),
+                  onTap: () {
+                    setState(() {
+                      if (type == 'customer') _selectedCustomer = item;
+                      else if (type == 'seller') _selectedSeller = item;
+                      else if (type == 'logistics') _selectedLogistics = item;
+                      _applyFilters();
+                    });
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
       ),
     );
   }
