@@ -66,6 +66,22 @@ class DatabaseHelper {
 
   // --- Specialized Methods ---
 
+  // Suggestions (Autocomplete storage)
+  Future<List<String>> getSuggestions(String key) async {
+    final box = Hive.box('suggestions');
+    return List<String>.from(box.get(key) ?? []);
+  }
+
+  Future<void> addSuggestion(String key, String value) async {
+    if (value.trim().isEmpty) return;
+    final box = Hive.box('suggestions');
+    List<String> current = List<String>.from(box.get(key) ?? []);
+    if (!current.contains(value.trim())) {
+      current.add(value.trim());
+      await box.put(key, current);
+    }
+  }
+
   // Bank Accounts
   Future<void> insertBankAccount(BankAccount account) async => await insert('bank_accounts', account.toMap());
   Future<List<BankAccount>> getAllBankAccounts() async {

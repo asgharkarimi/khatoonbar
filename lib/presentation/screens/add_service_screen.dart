@@ -26,6 +26,10 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   List<Customer> _customers = [];
   List<LogisticsCo> _logisticsCos = [];
   List<BankAccount> _bankAccounts = [];
+  
+  List<String> _originSuggestions = [];
+  List<String> _destinationSuggestions = [];
+  List<String> _expenseSuggestions = [];
 
   Driver? _selectedDriver;
   Car? _selectedCar;
@@ -47,17 +51,29 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   final TextEditingController _bankNameController = TextEditingController();
 
   double _fuel = 0;
+  bool _fuelInBoL = false;
   double _toll = 0;
+  bool _tollInBoL = false;
   double _loadingTip = 0;
+  bool _loadingTipInBoL = false;
   double _unloadingTip = 0;
+  bool _unloadingTipInBoL = false;
+  double _disinfection = 0;
+  bool _disinfectionInBoL = false;
   double _billOfLading = 0;
   double _commission = 0;
+  bool _commissionInBoL = true;
+  bool _includeInBillOfLading = false;
   
   List<OtherExpense> _otherExpenses = [];
 
   double _weight = 0;
   double _transportPricePerTon = 0;
   double _purchasePricePerTon = 0;
+  
+  bool _isAgreedFreight = false;
+  double _agreedFreightAmount = 0;
+  
   String? _purchaseInvoiceImagePath;
   bool _isLoading = true;
 
@@ -113,14 +129,26 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       _weight = s.weight;
       _transportPricePerTon = s.transportPricePerTon;
       _purchasePricePerTon = s.purchasePricePerTon;
+      
+      _isAgreedFreight = s.isAgreedFreight;
+      _agreedFreightAmount = s.agreedFreightAmount;
+      
       _purchaseInvoiceImagePath = s.purchaseInvoiceImagePath;
 
       _fuel = s.expenses.fuelCost;
+      _fuelInBoL = s.expenses.fuelInBoL;
       _toll = s.expenses.tollCost;
+      _tollInBoL = s.expenses.tollInBoL;
       _loadingTip = s.expenses.loadingTip;
+      _loadingTipInBoL = s.expenses.loadingTipInBoL;
       _unloadingTip = s.expenses.unloadingTip;
+      _unloadingTipInBoL = s.expenses.unloadingTipInBoL;
+      _disinfection = s.expenses.disinfectionCost;
+      _disinfectionInBoL = s.expenses.disinfectionInBoL;
       _billOfLading = s.expenses.billOfLadingCost;
       _commission = s.expenses.commission;
+      _commissionInBoL = s.expenses.commissionInBoL;
+      _includeInBillOfLading = s.expenses.includeInBillOfLading;
       _otherExpenses = List.from(s.expenses.otherExpenses);
     });
   }
@@ -134,6 +162,10 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       final customers = await _repository.getCustomers();
       final logistics = await _repository.getLogisticsCos();
       final bankAccounts = await _repository.getBankAccounts();
+      
+      final origins = await _repository.getSuggestions('origins');
+      final destinations = await _repository.getSuggestions('destinations');
+      final expenses = await _repository.getSuggestions('expense_titles');
 
       setState(() {
         _drivers = drivers;
@@ -143,6 +175,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
         _customers = customers;
         _logisticsCos = logistics;
         _bankAccounts = bankAccounts;
+        _originSuggestions = origins;
+        _destinationSuggestions = destinations;
+        _expenseSuggestions = expenses;
         _isLoading = false;
       });
     } catch (e) {
@@ -163,38 +198,63 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
   void _addOtherExpense() {
     final titleController = TextEditingController();
-    final amountController = TextEditingController();
+    double amount = 0;
+    bool includeInBoL = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('افزودن هزینه جانبی'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleController, decoration: const InputDecoration(labelText: 'عنوان هزینه (اجباری)')),
-            const SizedBox(height: 12),
-            TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ (تومان) - اجباری')),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('افزودن هزینه جانبی'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAutocompleteField(
+                controller: titleController,
+                label: 'عنوان هزینه (اجباری)',
+                suggestions: _expenseSuggestions,
+                onChanged: (v) => setDialogState(() {}),
+              ),
+              const SizedBox(height: 12),
+              AmountInput(
+                label: 'مبلغ (تومان) - اجباری',
+                onChanged: (v) => amount = v,
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                title: const Text('اضافه به بارنامه', style: TextStyle(fontSize: 13)),
+                value: includeInBoL,
+                onChanged: (v) => setDialogState(() => includeInBoL = v ?? false),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
+            ElevatedButton(
+              onPressed: () {
+                if (titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً عنوان هزینه را وارد کنید')));
+                  return;
+                }
+                if (amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لطفاً مبلغ معتبری وارد کنید')));
+                  return;
+                }
+                setState(() {
+                  _otherExpenses.add(OtherExpense(
+                    title: titleController.text.trim(),
+                    amount: amount,
+                    includeInBoL: includeInBoL,
+                  ));
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('افزودن'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-          ElevatedButton(
-            onPressed: () {
-              if (titleController.text.isEmpty || amountController.text.isEmpty) {
-                 return;
-              }
-              setState(() {
-                _otherExpenses.add(OtherExpense(
-                  title: titleController.text,
-                  amount: double.tryParse(amountController.text) ?? 0,
-                ));
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('افزودن'),
-          ),
-        ],
       ),
     );
   }
@@ -402,10 +462,34 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    double totalTransport = _weight * _transportPricePerTon;
-    double totalPurchase = _weight * _purchasePricePerTon;
-    double expensesTotal = _fuel + _toll + _loadingTip + _unloadingTip + _billOfLading + _commission + _otherExpenses.fold(0, (sum, item) => sum + item.amount);
-    double profit = totalTransport - expensesTotal;
+    
+    // شبیه‌سازی مدل برای محاسبات آنی در UI
+    final currentExpenses = ServiceExpenses(
+      fuelCost: _fuel, fuelInBoL: _fuelInBoL,
+      tollCost: _toll, tollInBoL: _tollInBoL,
+      loadingTip: _loadingTip, loadingTipInBoL: _loadingTipInBoL,
+      unloadingTip: _unloadingTip, unloadingTipInBoL: _unloadingTipInBoL,
+      disinfectionCost: _disinfection, disinfectionInBoL: _disinfectionInBoL,
+      billOfLadingCost: _billOfLading,
+      commission: _commission, commissionInBoL: _commissionInBoL,
+      otherExpenses: _otherExpenses,
+      includeInBillOfLading: _includeInBillOfLading,
+    );
+
+    final tempService = LoadService(
+      id: "temp", orderCode: "", 
+      car: Car(id: "", name: ""), driver: Driver(id: "", firstName: "", lastName: "", phone: ""), 
+      loadType: LoadType(id: "", name: ""), seller: Seller(id: "", name: "", product: ""),
+      origin: "", destination: "", date: DateTime.now(),
+      weight: _weight, transportPricePerTon: _transportPricePerTon,
+      isAgreedFreight: _isAgreedFreight, agreedFreightAmount: _agreedFreightAmount,
+      expenses: currentExpenses,
+    );
+
+    double totalTransport = tempService.totalTransportAmount;
+    double bolAmount = currentExpenses.owedToLogistics;
+    double netPay = tempService.driverNetPay;
+    double netProfit = tempService.netProfit;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
@@ -445,9 +529,9 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         _buildDropdownField<Customer>(label: 'مشتری (اختیاری)', icon: Icons.person_pin_outlined, value: _selectedCustomer, items: _customers, onChanged: (v) => _selectedCustomer = v, itemLabel: (c) => c.fullName, onAddPressed: _showAddCustomerDialog),
                         const SizedBox(height: 8),
                         Row(children: [
-                          Expanded(child: _buildTextField(controller: _originController, label: 'مبدا (اجباری)', icon: Icons.location_on_outlined, isRequired: true)),
+                          Expanded(child: _buildAutocompleteField(controller: _originController, label: 'مبدا (اجباری)', suggestions: _originSuggestions, icon: Icons.location_on_outlined, isRequired: true, onChanged: (v) => setState(() {}))),
                           const SizedBox(width: 12),
-                          Expanded(child: _buildTextField(controller: _destinationController, label: 'مقصد (اجباری)', icon: Icons.flag_outlined, isRequired: true)),
+                          Expanded(child: _buildAutocompleteField(controller: _destinationController, label: 'مقصد (اجباری)', suggestions: _destinationSuggestions, icon: Icons.flag_outlined, isRequired: true, onChanged: (v) => setState(() {}))),
                         ]),
                       ],
                     ),
@@ -456,9 +540,23 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       title: 'جزییات بار و مالی',
                       icon: Icons.payments_outlined,
                       children: [
-                        AmountInput(label: 'وزن بار (تن)', unit: 'تن', isDecimal: true, initialValue: _weight, onChanged: (v) => setState(() => _weight = v)),
-                        const SizedBox(height: 12),
-                        AmountInput(label: 'قیمت هر تن حمل', initialValue: _transportPricePerTon, onChanged: (v) => setState(() => _transportPricePerTon = v)),
+                        SwitchListTile(
+                          title: const Text('کرایه توافقی (بدون محاسبه وزن)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          value: _isAgreedFreight,
+                          onChanged: (v) => setState(() => _isAgreedFreight = v),
+                          contentPadding: EdgeInsets.zero,
+                          secondary: Icon(Icons.handshake_outlined, color: theme.primaryColor),
+                        ),
+                        const SizedBox(height: 8),
+                        if (_isAgreedFreight) ...[
+                          AmountInput(label: 'مبلغ کرایه توافقی', initialValue: _agreedFreightAmount, onChanged: (v) => setState(() => _agreedFreightAmount = v)),
+                          const SizedBox(height: 12),
+                          AmountInput(label: 'وزن بار (تن) - فقط برای ثبت در گزارش', unit: 'تن', isDecimal: true, initialValue: _weight, onChanged: (v) => setState(() => _weight = v)),
+                        ] else ...[
+                          AmountInput(label: 'وزن بار (تن)', unit: 'تن', isDecimal: true, initialValue: _weight, onChanged: (v) => setState(() => _weight = v)),
+                          const SizedBox(height: 12),
+                          AmountInput(label: 'قیمت هر تن حمل', initialValue: _transportPricePerTon, onChanged: (v) => setState(() => _transportPricePerTon = v)),
+                        ],
                         const SizedBox(height: 12),
                         AmountInput(label: 'قیمت هر تن خرید (اختیاری)', initialValue: _purchasePricePerTon, onChanged: (v) => setState(() => _purchasePricePerTon = v)),
                         const SizedBox(height: 16),
@@ -480,21 +578,86 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       title: 'مخارج سرویس',
                       icon: Icons.receipt_long_outlined,
                       children: [
-                        AmountInput(label: 'هزینه بارنامه (اجباری)', initialValue: _billOfLading, onChanged: (v) => setState(() => _billOfLading = v)),
+                        AmountInput(label: 'هزینه پایه بارنامه (اجباری)', initialValue: _billOfLading, onChanged: (v) => setState(() => _billOfLading = v)),
                         const SizedBox(height: 12),
-                        AmountInput(label: 'کمیسیون باربری (اختیاری)', initialValue: _commission, onChanged: (v) => setState(() => _commission = v)),
-                        const SizedBox(height: 12),
-                        Row(children: [
-                          Expanded(child: AmountInput(label: 'سوخت', initialValue: _fuel, onChanged: (v) => setState(() => _fuel = v))),
-                          const SizedBox(width: 12),
-                          Expanded(child: AmountInput(label: 'عوارض', initialValue: _toll, onChanged: (v) => setState(() => _toll = v))),
-                        ]),
-                        const SizedBox(height: 12),
-                        Row(children: [
-                          Expanded(child: AmountInput(label: 'انعام بارگیری', initialValue: _loadingTip, onChanged: (v) => setState(() => _loadingTip = v))),
-                          const SizedBox(width: 12),
-                          Expanded(child: AmountInput(label: 'انعام تخلیه', initialValue: _unloadingTip, onChanged: (v) => setState(() => _unloadingTip = v))),
-                        ]),
+                        SwitchListTile(
+                          title: const Text('افزودن کل هزینه‌ها به مبلغ بارنامه', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          subtitle: const Text('در صورت فعال‌سازی، کل مخارج در بدهی به باربری لحاظ می‌شود', style: TextStyle(fontSize: 11)),
+                          value: _includeInBillOfLading,
+                          onChanged: (v) => setState(() => _includeInBillOfLading = v),
+                        ),
+                        const Divider(),
+                        if (!_includeInBillOfLading) ...[
+                          Theme(
+                            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                            child: ExpansionTile(
+                              title: const Text('جزییات مخارج (کمیسیون، سوخت و...)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                              leading: const Icon(Icons.list_alt, size: 20),
+                              initiallyExpanded: true,
+                              childrenPadding: const EdgeInsets.symmetric(horizontal: 4),
+                              children: [
+                                _buildExpenseWithToggle(
+                                  label: 'کمیسیون باربری', 
+                                  amount: _commission, 
+                                  inBoL: _commissionInBoL,
+                                  onAmountChanged: (v) => setState(() => _commission = v),
+                                  onToggleChanged: (v) => setState(() => _commissionInBoL = v),
+                                ),
+                                _buildExpenseWithToggle(
+                                  label: 'سوخت', 
+                                  amount: _fuel, 
+                                  inBoL: _fuelInBoL,
+                                  onAmountChanged: (v) => setState(() => _fuel = v),
+                                  onToggleChanged: (v) => setState(() => _fuelInBoL = v),
+                                ),
+                                _buildExpenseWithToggle(
+                                  label: 'عوارض', 
+                                  amount: _toll, 
+                                  inBoL: _tollInBoL,
+                                  onAmountChanged: (v) => setState(() => _toll = v),
+                                  onToggleChanged: (v) => setState(() => _tollInBoL = v),
+                                ),
+                                _buildExpenseWithToggle(
+                                  label: 'انعام بارگیری', 
+                                  amount: _loadingTip, 
+                                  inBoL: _loadingTipInBoL,
+                                  onAmountChanged: (v) => setState(() => _loadingTip = v),
+                                  onToggleChanged: (v) => setState(() => _loadingTipInBoL = v),
+                                ),
+                                _buildExpenseWithToggle(
+                                  label: 'انعام تخلیه', 
+                                  amount: _unloadingTip, 
+                                  inBoL: _unloadingTipInBoL,
+                                  onAmountChanged: (v) => setState(() => _unloadingTip = v),
+                                  onToggleChanged: (v) => setState(() => _unloadingTipInBoL = v),
+                                ),
+                                _buildExpenseWithToggle(
+                                  label: 'هزینه ضدعفونی', 
+                                  amount: _disinfection, 
+                                  inBoL: _disinfectionInBoL,
+                                  onAmountChanged: (v) => setState(() => _disinfection = v),
+                                  onToggleChanged: (v) => setState(() => _disinfectionInBoL = v),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          AmountInput(label: 'کمیسیون باربری', initialValue: _commission, onChanged: (v) => setState(() => _commission = v)),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: AmountInput(label: 'سوخت', initialValue: _fuel, onChanged: (v) => setState(() => _fuel = v))),
+                            const SizedBox(width: 12),
+                            Expanded(child: AmountInput(label: 'عوارض', initialValue: _toll, onChanged: (v) => setState(() => _toll = v))),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: AmountInput(label: 'انعام بارگیری', initialValue: _loadingTip, onChanged: (v) => setState(() => _loadingTip = v))),
+                            const SizedBox(width: 12),
+                            Expanded(child: AmountInput(label: 'انعام تخلیه', initialValue: _unloadingTip, onChanged: (v) => setState(() => _unloadingTip = v))),
+                          ]),
+                          const SizedBox(height: 12),
+                          AmountInput(label: 'هزینه ضدعفونی', initialValue: _disinfection, onChanged: (v) => setState(() => _disinfection = v)),
+                        ],
                         const Divider(height: 32),
                         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                           const Text('سایر هزینه‌ها', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -502,7 +665,18 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                         ]),
                         ..._otherExpenses.map((exp) => ListTile(
                           dense: true,
-                          title: Text(exp.title),
+                          title: Row(
+                            children: [
+                              Text(exp.title),
+                              if (exp.includeInBoL) 
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)),
+                                  child: const Text('در بارنامه', style: TextStyle(fontSize: 9, color: Colors.blue)),
+                                ),
+                            ],
+                          ),
                           subtitle: Text("${AppFormatters.formatCurrency(exp.amount)} تومان"),
                           trailing: IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20), onPressed: () => setState(() => _otherExpenses.remove(exp))),
                         )),
@@ -541,7 +715,7 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    _buildSummaryCard(totalTransport, totalPurchase, expensesTotal, profit, theme),
+                    _buildSummaryCard(totalTransport, bolAmount, netPay, netProfit, theme),
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -560,17 +734,44 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
-  Widget _buildSummaryCard(double transport, double purchase, double expenses, double profit, ThemeData theme) {
+  Widget _buildExpenseWithToggle({
+    required String label, 
+    required double amount, 
+    required bool inBoL,
+    required Function(double) onAmountChanged,
+    required Function(bool) onToggleChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        children: [
+          AmountInput(label: label, initialValue: amount, onChanged: onAmountChanged),
+          CheckboxListTile(
+            title: const Text('اضافه به بارنامه', style: TextStyle(fontSize: 12)),
+            value: inBoL,
+            onChanged: (v) => onToggleChanged(v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            visualDensity: VisualDensity.compact,
+          ),
+          const Divider(height: 1, indent: 8, endIndent: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(double transport, double bolAmount, double netPay, double netProfit, ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: theme.primaryColor.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.primaryColor.withOpacity(0.1))),
       child: Column(
         children: [
-          _buildCalcRow('جمع کرایه حمل:', transport, theme),
-          if (purchase > 0) _buildCalcRow('جمع مبلغ خرید:', purchase, theme),
-          _buildCalcRow('جمع کل هزینه‌ها:', expenses, theme, color: Colors.red),
-          const Divider(height: 24),
-          _buildCalcRow('سود خالص (از حمل):', profit, theme, isBold: true, color: Colors.green.shade700),
+          _buildCalcRow('جمع کرایه حمل کل:', transport, theme),
+          _buildCalcRow('جمع مبالغ بارنامه:', bolAmount, theme, color: Colors.orange.shade800),
+          const Divider(height: 16),
+          _buildCalcRow('صافی (دریافتی از باربری):', netPay, theme, isBold: true, color: Colors.blue.shade800),
+          _buildCalcRow('سود واقعی (پس از تمام مخارج):', netProfit, theme, isBold: true, color: Colors.green.shade700),
         ],
       ),
     );
@@ -620,6 +821,82 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
     );
   }
 
+  Widget _buildAutocompleteField({
+    required TextEditingController controller,
+    required String label,
+    required List<String> suggestions,
+    IconData? icon,
+    bool isRequired = false,
+    required Function(String) onChanged,
+  }) {
+    return LayoutBuilder(
+      builder: (context, constraints) => Autocomplete<String>(
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text.isEmpty) {
+            return suggestions;
+          }
+          return suggestions.where((String option) {
+            return option.contains(textEditingValue.text.toLowerCase());
+          });
+        },
+        onSelected: (String selection) {
+          controller.text = selection;
+          onChanged(selection);
+        },
+        fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+          if (controller.text.isNotEmpty && textController.text.isEmpty) {
+            textController.text = controller.text;
+          }
+          textController.addListener(() {
+            controller.text = textController.text;
+            onChanged(textController.text);
+          });
+
+          return TextFormField(
+            controller: textController,
+            focusNode: focusNode,
+            validator: (value) {
+              if (isRequired && (value == null || value.isEmpty)) {
+                return 'لطفاً $label را وارد کنید';
+              }
+              return null;
+            },
+            decoration: InputDecoration(
+              labelText: label,
+              prefixIcon: icon != null ? Icon(icon, size: 20) : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+        },
+        optionsViewBuilder: (context, onSelected, options) {
+          return Align(
+            alignment: Alignment.topRight,
+            child: Material(
+              elevation: 4.0,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: constraints.maxWidth,
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: options.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    final String option = options.elementAt(index);
+                    return ListTile(
+                      title: Text(option),
+                      onTap: () => onSelected(option),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildDropdownField<T>({
     required String label, 
     required IconData icon, 
@@ -663,12 +940,20 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
 
     final expenses = ServiceExpenses(
       fuelCost: _fuel, 
+      fuelInBoL: _fuelInBoL,
       tollCost: _toll, 
+      tollInBoL: _tollInBoL,
       loadingTip: _loadingTip, 
+      loadingTipInBoL: _loadingTipInBoL,
       unloadingTip: _unloadingTip, 
+      unloadingTipInBoL: _unloadingTipInBoL,
+      disinfectionCost: _disinfection,
+      disinfectionInBoL: _disinfectionInBoL,
       billOfLadingCost: _billOfLading, 
       commission: _commission, 
-      otherExpenses: _otherExpenses
+      commissionInBoL: _commissionInBoL,
+      otherExpenses: _otherExpenses,
+      includeInBillOfLading: _includeInBillOfLading,
     );
     
     final newService = LoadService(
@@ -693,6 +978,8 @@ class _AddServiceScreenState extends State<AddServiceScreen> {
       fareBankName: _bankNameController.text,
       logisticsName: _logisticsNameController.text,
       logisticsPhone: _logisticsPhoneController.text,
+      isAgreedFreight: _isAgreedFreight,
+      agreedFreightAmount: _agreedFreightAmount,
     );
 
     try {

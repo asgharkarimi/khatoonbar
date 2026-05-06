@@ -5,7 +5,29 @@ import '../database/database_helper.dart';
 class ServiceRepository {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  Future<void> saveService(LoadService service) async => await _dbHelper.insert('load_services', service.toMap());
+  Future<void> saveService(LoadService service) async {
+    await _dbHelper.insert('load_services', service.toMap());
+    
+    // ذخیره خودکار پیشنهادات برای فیلدهای متنی
+    await addSuggestion('origins', service.origin);
+    await addSuggestion('destinations', service.destination);
+    
+    if (service.logisticsName != null && service.logisticsName!.isNotEmpty) {
+      await addSuggestion('logistics_names', service.logisticsName!);
+    }
+    
+    if (service.fareBankName != null && service.fareBankName!.isNotEmpty) {
+      await addSuggestion('bank_names', service.fareBankName!);
+    }
+    
+    if (service.fareAccountOwner != null && service.fareAccountOwner!.isNotEmpty) {
+      await addSuggestion('account_owners', service.fareAccountOwner!);
+    }
+
+    for (var exp in service.expenses.otherExpenses) {
+      await addSuggestion('expense_titles', exp.title);
+    }
+  }
   
   Future<List<LoadService>> getAllServices() async => await _dbHelper.getAllServices();
   
@@ -132,6 +154,10 @@ class ServiceRepository {
     } catch (_) {}
     await _dbHelper.delete('payments', id);
   }
+
+  // --- Suggestions ---
+  Future<List<String>> getSuggestions(String key) async => await _dbHelper.getSuggestions(key);
+  Future<void> addSuggestion(String key, String value) async => await _dbHelper.addSuggestion(key, value);
 
   // --- Individual Balance Methods ---
 

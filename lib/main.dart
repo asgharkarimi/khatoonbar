@@ -31,6 +31,7 @@ void main() async {
       Hive.openBox('logistics_cos'), 
       Hive.openBox('settings'),
       Hive.openBox('bank_accounts'),
+      Hive.openBox('suggestions'), // باکس برای ذخیره گزینه‌های پیشنهادی (مبدا، مقصد، عناوین هزینه)
     ]);
 
     // ۴. دیتای اولیه

@@ -141,13 +141,17 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
       padding: const EdgeInsets.all(16),
       children: [
         _buildExpenseSection('هزینه‌های ثابت سرویس', [
-          _buildInfoRow('هزینه بارنامه', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
+          _buildInfoRow('هزینه بارنامه (پایه)', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
           _buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
           _buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
           _buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
           _buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
           _buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"),
+          if (exp.disinfectionCost > 0)
+            _buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"),
         ]),
+        const SizedBox(height: 16),
+        _buildBoLDetailsSection(),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -183,10 +187,47 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
             )).toList()
           ),
         const Divider(height: 32),
-        _buildInfoRow('جمع کل هزینه‌ها', "${AppFormatters.formatCurrency(exp.total)} تومان", isBold: true, color: Colors.red),
+        _buildInfoRow('جمع کل مخارج سرویس', "${AppFormatters.formatCurrency(exp.total)} تومان", isBold: true, color: Colors.red),
         const SizedBox(height: 80),
       ],
     );
+  }
+
+  Widget _buildBoLDetailsSection() {
+    final exp = _currentService.expenses;
+    List<Widget> rows = [];
+
+    rows.add(_buildInfoRow('پایه بارنامه', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"));
+
+    if (exp.includeInBillOfLading) {
+      if (exp.fuelCost > 0) rows.add(_buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"));
+      if (exp.tollCost > 0) rows.add(_buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"));
+      if (exp.loadingTip > 0) rows.add(_buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"));
+      if (exp.unloadingTip > 0) rows.add(_buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"));
+      if (exp.commission > 0) rows.add(_buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"));
+      if (exp.disinfectionCost > 0) rows.add(_buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"));
+      for (var e in exp.otherExpenses) {
+        if (e.amount > 0) rows.add(_buildInfoRow(e.title, "${AppFormatters.formatCurrency(e.amount)} تومان"));
+      }
+    } else {
+      if (exp.fuelInBoL && exp.fuelCost > 0) rows.add(_buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"));
+      if (exp.tollInBoL && exp.tollCost > 0) rows.add(_buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"));
+      if (exp.loadingTipInBoL && exp.loadingTip > 0) rows.add(_buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"));
+      if (exp.unloadingTipInBoL && exp.unloadingTip > 0) rows.add(_buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"));
+      if (exp.commissionInBoL && exp.commission > 0) rows.add(_buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"));
+      if (exp.disinfectionInBoL && exp.disinfectionCost > 0) rows.add(_buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"));
+      for (var e in exp.otherExpenses) {
+        if (e.includeInBoL && e.amount > 0) {
+          rows.add(_buildInfoRow(e.title, "${AppFormatters.formatCurrency(e.amount)} تومان"));
+        }
+      }
+    }
+
+    return _buildExpenseSection('جزئیات مبلغ بارنامه (بدهی به باربری)', [
+      ...rows,
+      const Divider(),
+      _buildInfoRow('قابل پرداخت به باربری', "${AppFormatters.formatCurrency(exp.owedToLogistics)} تومان", isBold: true, color: Colors.blue),
+    ]);
   }
 
   Widget _buildExpenseSection(String title, List<Widget> children) {

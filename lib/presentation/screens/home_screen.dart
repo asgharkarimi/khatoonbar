@@ -405,9 +405,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildServiceCard(LoadService service, ThemeData theme) {
+    final customerDebt = service.finalBalanceCustomerDebt;
+    final sellerDebt = service.finalBalanceToSeller;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
         onTap: () async {
           await Navigator.push(
             context,
@@ -415,35 +420,99 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           _loadData();
         },
-        title: Text(
-          "${service.customer?.fullName ?? 'بدون نام'} - ${service.loadType.name}",
-          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            "${service.origin} به ${service.destination}\n${service.date.toPersianDate()}", 
-            style: theme.textTheme.bodySmall
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${service.customer?.fullName ?? 'بدون نام'} - ${service.loadType.name}",
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "${service.origin} به ${service.destination}", 
+                          style: theme.textTheme.bodySmall?.copyWith(color: Colors.blueGrey)
+                        ),
+                        Text(
+                          service.date.toPersianDate(), 
+                          style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.grey)
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        AppFormatters.formatCurrency(service.totalServicePriceForCustomer),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      Text(
+                        "${service.weight.toString().toPersianDigit()} تن", 
+                        style: theme.textTheme.bodySmall?.copyWith(fontSize: 10)
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildMiniStatus(
+                    label: "دریافتی مشتری",
+                    amount: service.totalCollectedFromCustomer,
+                    remaining: customerDebt,
+                    isPositive: true,
+                  ),
+                  _buildMiniStatus(
+                    label: "پرداختی فروشنده",
+                    amount: service.totalPaidToSeller,
+                    remaining: sellerDebt,
+                    isPositive: false,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              AppFormatters.formatCurrency(service.totalServicePriceForCustomer),
-              style: theme.textTheme.labelLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-            Text(
-              "${service.weight.toString().toPersianDigit()} تن", 
-              style: theme.textTheme.bodySmall?.copyWith(fontSize: 10)
-            ),
-          ],
-        ),
       ),
+    );
+  }
+
+  Widget _buildMiniStatus({required String label, required double amount, required double remaining, required bool isPositive}) {
+    bool isSettled = remaining <= 0;
+    Color color = isSettled ? Colors.green : (isPositive ? Colors.blue : Colors.red);
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(isSettled ? Icons.check_circle : Icons.pending_outlined, size: 10, color: isSettled ? Colors.green : Colors.grey),
+        const SizedBox(width: 4),
+        Text(
+          "$label: ",
+          style: const TextStyle(fontSize: 9, color: Colors.grey),
+        ),
+        Text(
+          isSettled ? "تسویه" : AppFormatters.formatCurrency(remaining),
+          style: TextStyle(
+            fontSize: 10, 
+            fontWeight: FontWeight.bold, 
+            color: isSettled ? Colors.green.shade700 : color
+          ),
+        ),
+      ],
     );
   }
 

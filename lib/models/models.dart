@@ -377,60 +377,101 @@ class OtherExpense {
   final String title;
   final double amount;
   final String? receiptImagePath;
+  final bool includeInBoL;
 
   OtherExpense({
     required this.title,
     required this.amount,
     this.receiptImagePath,
+    this.includeInBoL = false,
   });
 
   Map<String, dynamic> toMap() => {
     'title': title,
     'amount': amount,
     'receiptImagePath': receiptImagePath,
+    'includeInBoL': includeInBoL,
   };
 
   factory OtherExpense.fromMap(Map<String, dynamic> map) => OtherExpense(
     title: map['title'] ?? '',
     amount: (map['amount'] ?? 0 as num).toDouble(),
     receiptImagePath: map['receiptImagePath'],
+    includeInBoL: map['includeInBoL'] ?? false,
   );
 }
 
 class ServiceExpenses {
   double billOfLadingCost;
   double tollCost;
+  bool tollInBoL;
   double fuelCost;
+  bool fuelInBoL;
   double loadingTip;
+  bool loadingTipInBoL;
   double unloadingTip;
+  bool unloadingTipInBoL;
   double disinfectionCost;
+  bool disinfectionInBoL;
   double commission;
+  bool commissionInBoL;
   List<OtherExpense> otherExpenses;
+  bool includeInBillOfLading;
 
   ServiceExpenses({
     this.billOfLadingCost = 0,
     this.tollCost = 0,
+    this.tollInBoL = false,
     this.fuelCost = 0,
+    this.fuelInBoL = false,
     this.loadingTip = 0,
+    this.loadingTipInBoL = false,
     this.unloadingTip = 0,
+    this.unloadingTipInBoL = false,
     this.disinfectionCost = 0,
+    this.disinfectionInBoL = false,
     this.commission = 0,
+    this.commissionInBoL = true,
     this.otherExpenses = const [],
+    this.includeInBillOfLading = false,
   });
 
+  /// جمع کل مخارج (هر نوع هزینه‌ای که برای این سرویس انجام شده)
   double get total => billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + otherExpenses.fold(0, (sum, item) => sum + item.amount);
 
-  double get owedToLogistics => billOfLadingCost + commission;
+  /// مبلغی که باید به باربری پرداخت شود (پایه بارنامه + هزینه‌های انتخابی)
+  double get owedToLogistics {
+    if (includeInBillOfLading) return total;
+    
+    double amount = billOfLadingCost;
+    if (commissionInBoL) amount += commission;
+    if (tollInBoL) amount += tollCost;
+    if (fuelInBoL) amount += fuelCost;
+    if (loadingTipInBoL) amount += loadingTip;
+    if (unloadingTipInBoL) amount += unloadingTip;
+    if (disinfectionInBoL) amount += disinfectionCost;
+    for (var exp in otherExpenses) {
+      if (exp.includeInBoL) amount += exp.amount;
+    }
+    return amount;
+  }
 
   Map<String, dynamic> toMap() => {
     'billOfLadingCost': billOfLadingCost,
     'tollCost': tollCost,
+    'tollInBoL': tollInBoL,
     'fuelCost': fuelCost,
+    'fuelInBoL': fuelInBoL,
     'loadingTip': loadingTip,
+    'loadingTipInBoL': loadingTipInBoL,
     'unloadingTip': unloadingTip,
+    'unloadingTipInBoL': unloadingTipInBoL,
     'disinfectionCost': disinfectionCost,
+    'disinfectionInBoL': disinfectionInBoL,
     'commission': commission,
+    'commissionInBoL': commissionInBoL,
     'otherExpenses': otherExpenses.map((e) => e.toMap()).toList(),
+    'includeInBillOfLading': includeInBillOfLading,
   };
 
   factory ServiceExpenses.fromMap(Map<String, dynamic> map) {
@@ -438,12 +479,19 @@ class ServiceExpenses {
     return ServiceExpenses(
       billOfLadingCost: (map['billOfLadingCost'] ?? 0 as num).toDouble(),
       tollCost: (map['tollCost'] ?? 0 as num).toDouble(),
+      tollInBoL: map['tollInBoL'] ?? false,
       fuelCost: (map['fuelCost'] ?? 0 as num).toDouble(),
+      fuelInBoL: map['fuelInBoL'] ?? false,
       loadingTip: (map['loadingTip'] ?? 0 as num).toDouble(),
+      loadingTipInBoL: map['loadingTipInBoL'] ?? false,
       unloadingTip: (map['unloadingTip'] ?? 0 as num).toDouble(),
+      unloadingTipInBoL: map['unloadingTipInBoL'] ?? false,
       disinfectionCost: (map['disinfectionCost'] ?? 0 as num).toDouble(),
+      disinfectionInBoL: map['disinfectionInBoL'] ?? false,
       commission: (map['commission'] ?? 0 as num).toDouble(),
+      commissionInBoL: map['commissionInBoL'] ?? true,
       otherExpenses: othersList.map((e) => OtherExpense.fromMap(Map<String, dynamic>.from(e))).toList(),
+      includeInBillOfLading: map['includeInBillOfLading'] ?? false,
     );
   }
 }
@@ -470,10 +518,10 @@ class Payment {
   final String? checkImagePath;
   final String? bankName;
   final String? checkNumber;
-  final bool isCleared; // Keeping for compatibility, but prefer using status
+  final bool isCleared; 
   final CheckStatus status;
   final int graceDays;
-  final String? transferredToId; // ID of Seller or Entity the check was given to
+  final String? transferredToId; 
 
   Payment({
     this.id,
@@ -579,6 +627,9 @@ class LoadService {
   final String? logisticsName;
   final String? logisticsPhone;
 
+  final bool isAgreedFreight;
+  final double agreedFreightAmount;
+
   LoadService({
     required this.id,
     required this.orderCode,
@@ -605,6 +656,8 @@ class LoadService {
     this.fareBankName,
     this.logisticsName,
     this.logisticsPhone,
+    this.isAgreedFreight = false,
+    this.agreedFreightAmount = 0,
   });
 
   double get totalPurchaseAmount => weight * purchasePricePerTon;
@@ -620,7 +673,7 @@ class LoadService {
   double get remainingDebtToSeller => totalPurchaseAmount - totalPaidToSeller;
   double get finalBalanceToSeller => totalPurchaseAmount - totalPaidToSeller - pendingSellerChecks;
 
-  double get totalTransportAmount => weight * transportPricePerTon;
+  double get totalTransportAmount => isAgreedFreight ? agreedFreightAmount : weight * transportPricePerTon;
   double get totalServicePriceForCustomer => totalPurchaseAmount + totalTransportAmount;
   
   double get totalCollectedFromCustomer => collectionsFromCustomer
@@ -653,7 +706,11 @@ class LoadService {
       .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
       .fold(0.0, (sum, item) => sum + item.amount);
 
+  /// سود خالص سرویس (سود مالک خودرو): کرایه حمل کل منهای تمام هزینه‌های انجام شده
   double get netProfit => totalTransportAmount - expenses.total;
+
+  /// مبلغ "صافی" که راننده باید از باربری دریافت کند: کرایه حمل منهای مبالغ بارنامه
+  double get driverNetPay => totalTransportAmount - expenses.owedToLogistics;
 
   bool get isSellerSettled => remainingDebtToSeller <= 0;
   bool get isCustomerSettled => remainingCustomerDebt <= 0;
@@ -682,6 +739,8 @@ class LoadService {
       'fareBankName': fareBankName,
       'logisticsName': logisticsName,
       'logisticsPhone': logisticsPhone,
+      'isAgreedFreight': isAgreedFreight ? 1 : 0,
+      'agreedFreightAmount': agreedFreightAmount,
     };
   }
 
@@ -724,6 +783,8 @@ class LoadService {
       fareBankName: map['fareBankName'],
       logisticsName: map['logisticsName'],
       logisticsPhone: map['logisticsPhone'],
+      isAgreedFreight: (map['isAgreedFreight'] ?? 0) == 1,
+      agreedFreightAmount: (map['agreedFreightAmount'] ?? 0 as num).toDouble(),
     );
   }
 }

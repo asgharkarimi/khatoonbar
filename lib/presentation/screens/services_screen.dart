@@ -53,11 +53,9 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final now = DateTime.now();
     setState(() {
       _filteredServices = _allServices.where((service) {
-        // فیلتر جستجو
-        final searchIn = "${service.driver.fullName} ${service.customer?.fullName ?? ''} ${service.loadType.name} ${service.origin} ${service.destination}".toLowerCase();
+        final searchIn = "${service.driver.fullName} ${service.customer?.fullName ?? ''} ${service.loadType.name} ${service.origin} ${service.destination} ${service.orderCode}".toLowerCase();
         bool matchesSearch = searchIn.contains(_searchQuery.toLowerCase());
 
-        // فیلتر زمانی
         bool matchesTime = true;
         if (_activeFilter == ServiceFilter.today) {
           matchesTime = service.date.year == now.year && service.date.month == now.month && service.date.day == now.day;
@@ -101,7 +99,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                         onRefresh: _loadServices,
                         child: ListView.builder(
                           itemCount: _filteredServices.length,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           itemBuilder: (context, index) {
                             final service = _filteredServices[index];
                             return _buildServiceCard(service);
@@ -197,9 +195,14 @@ class _ServicesScreenState extends State<ServicesScreen> {
   }
 
   Widget _buildServiceCard(LoadService service) {
+    final customerDebt = service.finalBalanceCustomerDebt;
+    final sellerDebt = service.finalBalanceToSeller;
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
         onTap: () async {
           await Navigator.push(
             context,
@@ -207,26 +210,122 @@ class _ServicesScreenState extends State<ServicesScreen> {
           );
           _loadServices();
         },
-        title: Text(
-          "${service.customer?.fullName ?? 'بدون نام'} - ${service.loadType.name}",
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        subtitle: Text(
-          "${service.origin} به ${service.destination}\n${service.date.toPersianDate()}",
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              AppFormatters.formatCurrency(service.totalServicePriceForCustomer),
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
-            ),
-            Text("${service.weight.toString().toPersianDigit()} تن", style: const TextStyle(fontSize: 11)),
-          ],
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${service.customer?.fullName ?? 'بدون نام'} - ${service.loadType.name}",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              "${service.origin} به ${service.destination}",
+                              style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              service.date.toPersianDate(),
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                            const SizedBox(width: 12),
+                            const Icon(Icons.numbers_outlined, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              service.orderCode.toPersianDigit(),
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        AppFormatters.formatCurrency(service.totalServicePriceForCustomer),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14),
+                      ),
+                      Text(
+                        "${service.weight.toString().toPersianDigit()} تن",
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const Divider(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildMiniStatusBadge(
+                    label: "دریافتی از مشتری",
+                    amount: service.totalCollectedFromCustomer,
+                    remaining: customerDebt,
+                    isPositive: true,
+                  ),
+                  _buildMiniStatusBadge(
+                    label: "پرداختی به فروشنده",
+                    amount: service.totalPaidToSeller,
+                    remaining: sellerDebt,
+                    isPositive: false,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMiniStatusBadge({required String label, required double amount, required double remaining, required bool isPositive}) {
+    bool isSettled = remaining <= 0;
+    Color color = isSettled ? Colors.green : (isPositive ? Colors.blue : Colors.red);
+    
+    return Column(
+      crossAxisAlignment: isPositive ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isSettled) 
+              const Icon(Icons.check_circle, size: 12, color: Colors.green)
+            else if (amount > 0)
+              const Icon(Icons.pending_actions, size: 12, color: Colors.orange),
+            const SizedBox(width: 4),
+            Text(
+              isSettled ? "تسویه کامل" : (amount == 0 ? "بدون پرداخت" : "مانده: ${AppFormatters.formatCurrency(remaining)}"),
+              style: TextStyle(
+                fontSize: 11, 
+                fontWeight: FontWeight.bold, 
+                color: isSettled ? Colors.green.shade700 : (amount == 0 ? Colors.grey : color)
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

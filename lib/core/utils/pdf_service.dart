@@ -45,6 +45,7 @@ class PdfService {
       final pdf = pw.Document();
       final theme = await _getTheme();
       final isTransportOnly = service.purchasePricePerTon == 0;
+      final exp = service.expenses;
 
       String logisticsName = service.logisticsCo?.name ?? service.logisticsName ?? "";
 
@@ -78,20 +79,40 @@ class PdfService {
                   _rowInfo("باربری:", logisticsName),
                 
                 pw.SizedBox(height: 10),
-                _buildSectionTitle("جزئیات بار"),
+                _buildSectionTitle("جزئیات بار و مسیر"),
                 _rowInfo("نوع بار:", service.loadType.name),
                 _rowInfo("مسیر:", "${service.origin} به ${service.destination}"),
                 _rowInfo("وزن خالص:", "${service.weight.toString().toPersianDigit()} تن"),
                 
                 pw.SizedBox(height: 10),
-                _buildSectionTitle("محاسبات مالی"),
+                _buildSectionTitle("محاسبات مالی بارنامه"),
+                _rowInfo("پایه بارنامه:", "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
+                
+                // لیست مبالغ اضافه شده به بارنامه
+                if (exp.includeInBillOfLading) ...[
+                  if (exp.commission > 0) _rowInfo("کمیسیون:", "${AppFormatters.formatCurrency(exp.commission)} تومان"),
+                  if (exp.tollCost > 0) _rowInfo("عوارض:", "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
+                  if (exp.fuelCost > 0) _rowInfo("سوخت:", "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
+                ] else ...[
+                  if (exp.commissionInBoL && exp.commission > 0) _rowInfo("کمیسیون:", "${AppFormatters.formatCurrency(exp.commission)} تومان"),
+                  if (exp.tollInBoL && exp.tollCost > 0) _rowInfo("عوارض:", "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
+                  if (exp.fuelInBoL && exp.fuelCost > 0) _rowInfo("سوخت:", "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
+                  if (exp.loadingTipInBoL && exp.loadingTip > 0) _rowInfo("انعام بارگیری:", "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
+                  if (exp.unloadingTipInBoL && exp.unloadingTip > 0) _rowInfo("انعام تخلیه:", "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
+                  for (var e in exp.otherExpenses)
+                    if (e.includeInBoL && e.amount > 0) _rowInfo(e.title + ":", "${AppFormatters.formatCurrency(e.amount)} تومان"),
+                ],
+                _rowInfo("جمع قابل پرداخت به باربری:", "${AppFormatters.formatCurrency(exp.owedToLogistics)} تومان", isBold: true),
+
+                pw.SizedBox(height: 10),
+                _buildSectionTitle("خلاصه فاکتور نهایی"),
                 if (!isTransportOnly)
-                  _rowInfo("فی خرید:", "${AppFormatters.formatCurrency(service.purchasePricePerTon)} تومان"),
-                _rowInfo("فی حمل:", "${AppFormatters.formatCurrency(service.transportPricePerTon)} تومان"),
+                  _rowInfo("جمع کل خرید کالا:", "${AppFormatters.formatCurrency(service.totalPurchaseAmount)} تومان"),
+                _rowInfo("کل کرایه حمل:", "${AppFormatters.formatCurrency(service.totalTransportAmount)} تومان"),
                 
                 if (service.fareAccountNumber != null && service.fareAccountNumber!.isNotEmpty) ...[
                   pw.SizedBox(height: 5),
-                  _rowInfo("واریز به:", "${service.fareAccountOwner ?? ''} (${service.fareBankName ?? ''})"),
+                  _rowInfo("واریز کرایه به:", "${service.fareAccountOwner ?? ''} (${service.fareBankName ?? ''})"),
                   _rowInfo("شماره حساب:", service.fareAccountNumber!.toPersianDigit()),
                 ],
 
@@ -108,7 +129,7 @@ class PdfService {
                     children: [
                       pw.Text(_fix("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: secondaryColor)),
-                      pw.Text(_fix(isTransportOnly ? "مبلغ قابل پرداخت:" : "جمع کل فاکتور:"),
+                      pw.Text(_fix(isTransportOnly ? "مبلغ قابل پرداخت:" : "جمع کل فاکتور مشتری:"),
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: secondaryColor)),
                     ],
                   ),
@@ -398,15 +419,15 @@ class PdfService {
     );
   }
 
-  static pw.Widget _rowInfo(String label, String value) {
+  static pw.Widget _rowInfo(String label, String value, {bool isBold = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.end,
         children: [
-          pw.Text(_fix(value), style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          pw.Text(_fix(value), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
           pw.SizedBox(width: 8),
-          pw.Text(_fix(label), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+          pw.Text(_fix(label), style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
         ],
       ),
     );

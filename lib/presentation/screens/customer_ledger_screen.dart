@@ -296,6 +296,9 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
   }
 
   Widget _buildServiceTile(LoadService s) {
+    final remaining = s.finalBalanceCustomerDebt;
+    final isSettled = remaining <= 0;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -309,7 +312,17 @@ class _CustomerLedgerScreenState extends State<CustomerLedgerScreen> with Single
           children: [
             const SizedBox(height: 4),
             Row(children: [const Icon(Icons.calendar_today, size: 12, color: Colors.grey), const SizedBox(width: 4), Text(s.date.toPersianDate(), style: const TextStyle(fontSize: 11))]),
-            if (s.orderCode.isNotEmpty) Text("کد سفارش: ${s.orderCode.toPersianDigit()}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Icon(isSettled ? Icons.check_circle : Icons.pending_outlined, size: 12, color: isSettled ? Colors.green : Colors.orange),
+                const SizedBox(width: 4),
+                Text(
+                  isSettled ? "تسویه کامل" : "مانده: ${AppFormatters.formatCurrency(remaining)}",
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isSettled ? Colors.green : Colors.orange.shade800),
+                ),
+              ],
+            ),
           ],
         ),
         trailing: Text(AppFormatters.formatCurrency(s.totalServicePriceForCustomer), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
