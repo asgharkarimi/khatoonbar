@@ -3,21 +3,17 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'core/theme/app_theme.dart';
-import 'core/database/database_helper.dart';
 import 'core/utils/notification_service.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/reports_screen.dart';
 import 'presentation/screens/settings_screen.dart';
 
 void main() async {
-  // ۱. شروع سریع رابط کاربری
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    // ۲. مقداردهی اولیه Hive
     await Hive.initFlutter();
     
-    // ۳. باز کردن باکس‌ها به صورت موازی برای سرعت بیشتر
     await Future.wait([
       Hive.openBox('drivers'),
       Hive.openBox('customers'),
@@ -31,20 +27,17 @@ void main() async {
       Hive.openBox('logistics_cos'), 
       Hive.openBox('settings'),
       Hive.openBox('bank_accounts'),
-      Hive.openBox('suggestions'), // باکس برای ذخیره گزینه‌های پیشنهادی (مبدا، مقصد، عناوین هزینه)
+      Hive.openBox('checks'),
+      Hive.openBox('transactions'),
+      Hive.openBox('suggestions'),
     ]);
 
-    // ۴. دیتای اولیه
-    await DatabaseHelper.instance.seedDefaultData();
-    
   } catch (e) {
     debugPrint("خطا در راه‌اندازی دیتابیس: $e");
   }
 
-  // ۵. اجرای اپلیکیشن
   runApp(const KhatoonBarApp());
 
-  // ۶. کارهای پس‌زمینه و اعلان‌ها
   Future.microtask(() async {
     try {
       await NotificationService.init();
@@ -89,11 +82,11 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedIndex = 1; // شروع با تب خانه (وسط)
+  int _selectedIndex = 0;
 
   final List<Widget> _screens = [
-    const ReportsScreen(),
     const HomeScreen(),
+    const ReportsScreen(),
     const SettingsScreen(),
   ];
 
@@ -102,10 +95,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        body: _screens[_selectedIndex],
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: _screens,
+        ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _selectedIndex,
           type: BottomNavigationBarType.fixed,
+          selectedFontSize: 12,
+          unselectedFontSize: 10,
           onTap: (index) {
             setState(() {
               _selectedIndex = index;
@@ -113,14 +111,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.analytics_outlined),
-              activeIcon: Icon(Icons.analytics),
-              label: 'گزارشات',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
               activeIcon: Icon(Icons.home),
               label: 'خانه',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.analytics_outlined),
+              activeIcon: Icon(Icons.analytics),
+              label: 'گزارشات',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings_outlined),

@@ -57,7 +57,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
     final now = DateTime.now();
     setState(() {
       _filteredServices = _allServices.where((service) {
-        // ۱. جستجوی متنی در تمامی فیلدها
         final searchIn = [
           service.driver.fullName,
           service.customer?.fullName ?? '',
@@ -72,7 +71,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
         bool matchesSearch = searchIn.contains(_searchQuery.toLowerCase());
 
-        // ۲. فیلتر زمانی
         bool matchesTime = true;
         if (_activeFilter == ServiceFilter.today) {
           matchesTime = service.date.year == now.year && service.date.month == now.month && service.date.day == now.day;
@@ -85,7 +83,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
           matchesTime = service.date.year == _customDate!.year && service.date.month == _customDate!.month && service.date.day == _customDate!.day;
         }
 
-        // ۳. فیلترهای انتخابی از منو
         bool matchesCustomer = _selectedCustomer == null || service.customer?.id == _selectedCustomer!.id;
         bool matchesSeller = _selectedSeller == null || service.seller.id == _selectedSeller!.id;
         bool matchesLogistics = _selectedLogistics == null ||
@@ -164,8 +161,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final result = await Navigator.push(
-            context,
+          final result = await Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(builder: (context) => const AddServiceScreen()),
           );
           if (result == true) _loadServices();
@@ -339,8 +335,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () async {
-          await Navigator.push(
-            context,
+          await Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: service)),
           );
           _loadServices();

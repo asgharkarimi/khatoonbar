@@ -1,555 +1,342 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
 import '../../core/data/service_repository.dart';
-import '../../core/database/database_helper.dart';
 import '../../core/utils/formatters.dart';
-import '../../core/utils/pdf_service.dart';
 import '../../models/models.dart';
-import 'add_payment_screen.dart';
 import 'add_service_screen.dart';
+import 'add_payment_screen.dart';
 
 class ServiceDetailsScreen extends StatefulWidget {
   final LoadService service;
-
   const ServiceDetailsScreen({super.key, required this.service});
 
   @override
   State<ServiceDetailsScreen> createState() => _ServiceDetailsScreenState();
 }
 
-class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with SingleTickerProviderStateMixin {
+class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   late LoadService _currentService;
-  List<Payment> _allRelatedPayments = [];
-  bool _isLoading = true;
-  late TabController _tabController;
   final ServiceRepository _repository = ServiceRepository();
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); 
     _currentService = widget.service;
-    _refreshData();
   }
 
-  Future<void> _refreshData() async {
+  Future<void> _refreshService() async {
     setState(() => _isLoading = true);
-    final allServices = await _repository.getAllServices();
-    final allPayments = await _repository.getPayments();
-    
+    final services = await _repository.getAllServices();
     setState(() {
-      _currentService = allServices.firstWhere((s) => s.id == _currentService.id);
-      
-      _allRelatedPayments = allPayments.where((p) {
-        bool isDirect = p.serviceId == _currentService.id;
-        bool isGeneralCustomer = p.customerId != null && p.customerId == _currentService.customer?.id;
-        bool isGeneralSeller = p.sellerId != null && p.sellerId == _currentService.seller.id;
-        bool isGeneralLogistics = p.logisticsId != null && p.logisticsId == _currentService.logisticsCo?.id;
-        return isDirect || isGeneralCustomer || isGeneralSeller || isGeneralLogistics;
-      }).toList();
-      
+      _currentService = services.firstWhere((s) => s.id == _currentService.id);
       _isLoading = false;
     });
   }
 
-  Future<void> _toggleCheckStatus(Payment p) async {
-    final updatedPayment = Payment(
-      id: p.id,
-      serviceId: p.serviceId,
-      sellerId: p.sellerId,
-      customerId: p.customerId,
-      logisticsId: p.logisticsId,
-      myAccountId: p.myAccountId,
-      type: p.type,
-      method: p.method,
-      amount: p.amount,
-      date: p.date,
-      description: p.description,
-      receiptImagePath: p.receiptImagePath,
-      checkDueDate: p.checkDueDate,
-      checkImagePath: p.checkImagePath,
-      bankName: p.bankName,
-      checkNumber: p.checkNumber,
-      isCleared: !p.isCleared,
-    );
-
-    await DatabaseHelper.instance.insertPayment(updatedPayment);
-    _refreshData();
-  }
-
-  Future<void> _deletePayment(String id) async {
-    await DatabaseHelper.instance.delete('payments', id);
-    _refreshData();
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final theme = Theme.of(context);
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('جزئیات کامل سرویس'),
+        title: Text("جزییات سرویس ${_currentService.orderCode}"),
         actions: [
           IconButton(
-            onPressed: () => PdfService.generateAndPrintService(_currentService),
-            icon: const Icon(Icons.print),
-            tooltip: 'چاپ فاکتور',
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') _editService();
-              else if (value == 'delete') _confirmDeleteService();
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AddServiceScreen(serviceToEdit: _currentService)),
+              );
+              if (result == true) _refreshService();
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'edit', child: Text('ویرایش سرویس')),
-              const PopupMenuItem(value: 'delete', child: Text('حذف سرویس')),
-            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: _confirmDelete,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'اطلاعات'),
-            Tab(text: 'هزینه‌ها'), 
-            Tab(text: 'تراکنش‌ها'),
-          ],
-        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildStatusHeader(theme),
+                  const SizedBox(height: 16),
+                  _buildMainInfoCard(theme),
+                  const SizedBox(height: 16),
+                  _buildRouteAndTimingCard(theme),
+                  const SizedBox(height: 16),
+                  _buildFinancialCard(theme),
+                  const SizedBox(height: 16),
+                  _buildExpensesCard(theme),
+                  const SizedBox(height: 16),
+                  _buildImagesCard(theme),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+      // استفاده از bottomNavigationBar به جای bottomSheet برای مدیریت بهتر فاصله
+      bottomNavigationBar: _buildBottomActions(theme),
+    );
+  }
+
+  Widget _buildStatusHeader(ThemeData theme) {
+    bool isSettled = _currentService.isCustomerSettled;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: isSettled ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isSettled ? Colors.green.shade200 : Colors.orange.shade200),
+      ),
+      child: Row(
         children: [
-          _buildInfoTab(),
-          _buildExpensesTab(), 
-          _buildPaymentsTab(),
+          Icon(isSettled ? Icons.check_circle : Icons.pending_actions, 
+               color: isSettled ? Colors.green : Colors.orange),
+          const SizedBox(width: 12),
+          Text(
+            isSettled ? "تسویه شده با مشتری" : "دارای مانده بدهی مشتری",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isSettled ? Colors.green.shade900 : Colors.orange.shade900,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            _currentService.date.toPersianDate(),
+            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+          ),
         ],
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showPaymentTypePicker(),
-        label: const Text('ثبت تراکنش'),
-        icon: const Icon(Icons.add),
-        backgroundColor: Colors.green,
       ),
     );
   }
 
-  Widget _buildExpensesTab() {
-    final exp = _currentService.expenses;
-    return ListView(
-      padding: const EdgeInsets.all(16),
+  Widget _buildMainInfoCard(ThemeData theme) {
+    return _buildCard(
+      title: "اطلاعات پایه",
+      icon: Icons.info_outline,
       children: [
-        _buildExpenseSection('هزینه‌های ثابت سرویس', [
-          _buildInfoRow('هزینه بارنامه (پایه)', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
-          _buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
-          _buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
-          _buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
-          _buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
-          _buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"),
-          if (exp.disinfectionCost > 0)
-            _buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"),
-        ]),
-        const SizedBox(height: 16),
-        _buildBoLDetailsSection(),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('سایر هزینه‌ها و رسیدها', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-            TextButton.icon(
-              onPressed: _addExpenseToService,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('افزودن هزینه'),
-            ),
-          ],
-        ),
-        if (exp.otherExpenses.isNotEmpty)
-          _buildExpenseSection('', 
-            exp.otherExpenses.map((e) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(e.title, style: const TextStyle(fontSize: 14)),
-              subtitle: Text("${AppFormatters.formatCurrency(e.amount)} تومان", style: const TextStyle(color: Colors.red)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (e.receiptImagePath != null)
-                    IconButton(
-                      icon: const Icon(Icons.receipt_long, color: Colors.blue),
-                      onPressed: () => _showImageDialog(e.receiptImagePath!, 'تصویر رسید'),
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                    onPressed: () => _removeExpenseFromService(e),
-                  ),
-                ],
-              ),
-            )).toList()
-          ),
-        const Divider(height: 32),
-        _buildInfoRow('جمع کل مخارج سرویس', "${AppFormatters.formatCurrency(exp.total)} تومان", isBold: true, color: Colors.red),
-        const SizedBox(height: 80),
+        _buildDataRow("راننده:", _currentService.driver.fullName),
+        _buildDataRow("خودرو:", _currentService.car.name + (_currentService.car.plate != null ? " (${_currentService.car.plate})" : "")),
+        _buildDataRow("نوع بار:", _currentService.loadType.name),
+        _buildDataRow("فروشنده:", _currentService.seller.name),
+        if (_currentService.customer != null)
+          _buildDataRow("مشتری:", _currentService.customer!.fullName),
       ],
     );
   }
 
-  Widget _buildBoLDetailsSection() {
-    final exp = _currentService.expenses;
-    List<Widget> rows = [];
-
-    rows.add(_buildInfoRow('پایه بارنامه', "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"));
-
-    if (exp.includeInBillOfLading) {
-      if (exp.fuelCost > 0) rows.add(_buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"));
-      if (exp.tollCost > 0) rows.add(_buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"));
-      if (exp.loadingTip > 0) rows.add(_buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"));
-      if (exp.unloadingTip > 0) rows.add(_buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"));
-      if (exp.commission > 0) rows.add(_buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"));
-      if (exp.disinfectionCost > 0) rows.add(_buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"));
-      for (var e in exp.otherExpenses) {
-        if (e.amount > 0) rows.add(_buildInfoRow(e.title, "${AppFormatters.formatCurrency(e.amount)} تومان"));
-      }
-    } else {
-      if (exp.fuelInBoL && exp.fuelCost > 0) rows.add(_buildInfoRow('سوخت', "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"));
-      if (exp.tollInBoL && exp.tollCost > 0) rows.add(_buildInfoRow('عوارض', "${AppFormatters.formatCurrency(exp.tollCost)} تومان"));
-      if (exp.loadingTipInBoL && exp.loadingTip > 0) rows.add(_buildInfoRow('انعام بارگیری', "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"));
-      if (exp.unloadingTipInBoL && exp.unloadingTip > 0) rows.add(_buildInfoRow('انعام تخلیه', "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"));
-      if (exp.commissionInBoL && exp.commission > 0) rows.add(_buildInfoRow('کمیسیون', "${AppFormatters.formatCurrency(exp.commission)} تومان"));
-      if (exp.disinfectionInBoL && exp.disinfectionCost > 0) rows.add(_buildInfoRow('ضدعفونی', "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"));
-      for (var e in exp.otherExpenses) {
-        if (e.includeInBoL && e.amount > 0) {
-          rows.add(_buildInfoRow(e.title, "${AppFormatters.formatCurrency(e.amount)} تومان"));
-        }
-      }
-    }
-
-    return _buildExpenseSection('جزئیات مبلغ بارنامه (بدهی به باربری)', [
-      ...rows,
-      const Divider(),
-      _buildInfoRow('قابل پرداخت به باربری', "${AppFormatters.formatCurrency(exp.owedToLogistics)} تومان", isBold: true, color: Colors.blue),
-    ]);
-  }
-
-  Widget _buildExpenseSection(String title, List<Widget> children) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (title.isNotEmpty) ...[
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-              const Divider(),
-            ],
-            ...children,
-          ],
-        ),
-      ),
+  Widget _buildRouteAndTimingCard(ThemeData theme) {
+    return _buildCard(
+      title: "مسیر و زمان‌بندی",
+      icon: Icons.map_outlined,
+      children: [
+        _buildDataRow("مبدا:", _currentService.origin),
+        _buildDataRow("مقصد:", _currentService.destination),
+        const Divider(),
+        if (_currentService.loadingDateTime != null)
+          _buildDataRow("زمان بارگیری:", AppFormatters.formatPersianDateTime(_currentService.loadingDateTime!)),
+        if (_currentService.unloadingDateTime != null)
+          _buildDataRow("زمان تخلیه:", AppFormatters.formatPersianDateTime(_currentService.unloadingDateTime!)),
+      ],
     );
   }
 
-  Widget _buildInfoTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+  Widget _buildFinancialCard(ThemeData theme) {
+    return _buildCard(
+      title: "محاسبات مالی",
+      icon: Icons.payments_outlined,
+      children: [
+        _buildDataRow("وزن بار:", "${_currentService.weight} تن"),
+        if (!_currentService.isAgreedFreight)
+          _buildDataRow("قیمت حمل (هر تن):", "${AppFormatters.formatCurrency(_currentService.transportPricePerTon)} تومان"),
+        _buildDataRow("کرایه حمل کل:", "${AppFormatters.formatCurrency(_currentService.totalTransportAmount)} تومان", isBold: true),
+        const Divider(),
+        _buildDataRow("قیمت خرید (هر تن):", "${AppFormatters.formatCurrency(_currentService.purchasePricePerTon)} تومان"),
+        _buildDataRow("مبلغ خرید کل:", "${AppFormatters.formatCurrency(_currentService.totalPurchaseAmount)} تومان", isBold: true),
+        const Divider(),
+        _buildDataRow("جمع کل بدهی مشتری:", "${AppFormatters.formatCurrency(_currentService.totalServicePriceForCustomer)} تومان", color: Colors.blue.shade900, isBold: true),
+      ],
+    );
+  }
+
+  Widget _buildExpensesCard(ThemeData theme) {
+    final ex = _currentService.expenses;
+    return _buildCard(
+      title: "مخارج و جزییات بارنامه",
+      icon: Icons.receipt_long_outlined,
+      children: [
+        _buildDataRow("پایه بارنامه:", AppFormatters.formatCurrency(ex.billOfLadingCost)),
+        _buildDataRow("کمیسیون:", AppFormatters.formatCurrency(ex.commission)),
+        
+        if (ex.loadingWeighbridge > 0 || ex.loaderLoading > 0 || ex.tallyClerk > 0 || ex.loadingTip > 0) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 4),
+            child: Text("مخارج بارگیری:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+          ),
+          if (ex.loadingTip > 0) _buildDataRow("انعام بارگیری:", AppFormatters.formatCurrency(ex.loadingTip)),
+          if (ex.loadingWeighbridge > 0) _buildDataRow("باسکول بارگیری:", AppFormatters.formatCurrency(ex.loadingWeighbridge)),
+          if (ex.loaderLoading > 0) _buildDataRow("لودر:", AppFormatters.formatCurrency(ex.loaderLoading)),
+          if (ex.tallyClerk > 0) _buildDataRow("بارشمار:", AppFormatters.formatCurrency(ex.tallyClerk)),
+        ],
+
+        if (ex.unloadingWeighbridge > 0 || ex.unloadingWorker > 0 || ex.unloadingTip > 0) ...[
+          const Padding(
+            padding: EdgeInsets.only(top: 8, bottom: 4),
+            child: Text("مخارج تخلیه:", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+          ),
+          if (ex.unloadingTip > 0) _buildDataRow("انعام تخلیه:", AppFormatters.formatCurrency(ex.unloadingTip)),
+          if (ex.unloadingWeighbridge > 0) _buildDataRow("باسکول تخلیه:", AppFormatters.formatCurrency(ex.unloadingWeighbridge)),
+          if (ex.unloadingWorker > 0) _buildDataRow("کارگر تخلیه:", AppFormatters.formatCurrency(ex.unloadingWorker)),
+        ],
+
+        if (ex.fuelCost > 0) _buildDataRow("سوخت:", AppFormatters.formatCurrency(ex.fuelCost)),
+        if (ex.tollCost > 0) _buildDataRow("عوارض:", AppFormatters.formatCurrency(ex.tollCost)),
+        
+        ...ex.otherExpenses.map((e) => _buildDataRow(e.title, AppFormatters.formatCurrency(e.amount))),
+        
+        const Divider(),
+        _buildDataRow("قابل پرداخت به باربری:", AppFormatters.formatCurrency(ex.owedToLogistics), isBold: true, color: Colors.orange.shade900),
+        _buildDataRow("جمع کل مخارج:", AppFormatters.formatCurrency(ex.total), isBold: true, color: Colors.red.shade900),
+        const Divider(),
+        _buildDataRow("سود خالص (صافی):", AppFormatters.formatCurrency(_currentService.netProfit), isBold: true, color: Colors.green.shade900),
+      ],
+    );
+  }
+
+  Widget _buildImagesCard(ThemeData theme) {
+    return _buildCard(
+      title: "تصاویر اسناد",
+      icon: Icons.image_outlined,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              if (_currentService.billOfLadingImagePath != null)
+                _buildImageThumb("بارنامه", _currentService.billOfLadingImagePath!),
+              if (_currentService.weighbridgeImagePath != null)
+                _buildImageThumb("باسکول", _currentService.weighbridgeImagePath!),
+              if (_currentService.purchaseInvoiceImagePath != null)
+                _buildImageThumb("فاکتور خرید", _currentService.purchaseInvoiceImagePath!),
+            ],
+          ),
+        ),
+        if (_currentService.billOfLadingImagePath == null && 
+            _currentService.weighbridgeImagePath == null && 
+            _currentService.purchaseInvoiceImagePath == null)
+          const Text("تصویری ثبت نشده است", style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildImageThumb(String label, String path) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
       child: Column(
         children: [
-          _buildInfoSection('مشخصات سرویس', [
-            _buildInfoRow('کد سفارش', _currentService.orderCode.toPersianDigit(), isBold: true),
-            _buildInfoRow('مشتری', _currentService.customer?.fullName ?? 'ثبت نشده'),
-            _buildInfoRow('نوع بار', _currentService.loadType.name),
-            _buildInfoRow('وزن', "${_currentService.weight.toString().toPersianDigit()} تن"),
-            _buildInfoRow('مسیر', "${_currentService.origin} به ${_currentService.destination}"),
-            if (_currentService.logisticsCo != null)
-              _buildInfoRow('باربری', _currentService.logisticsCo!.name),
-          ]),
-          const SizedBox(height: 16),
-          _buildInfoSection('وضعیت تسویه مشتری', [
-            _buildInfoRow('جمع کل فاکتور مشتری', "${AppFormatters.formatCurrency(_currentService.totalServicePriceForCustomer)} تومان"),
-            _buildInfoRow('دریافتی نقد/وصول شده', "${AppFormatters.formatCurrency(_currentService.totalCollectedFromCustomer)} تومان", color: Colors.green),
-            _buildInfoRow('چک در جریان مشتری', "${AppFormatters.formatCurrency(_currentService.pendingCustomerChecks)} تومان", color: Colors.orange),
-            const Divider(),
-            _buildInfoRow('مانده بدهی نهایی مشتری', "${AppFormatters.formatCurrency(_currentService.finalBalanceCustomerDebt)} تومان", isBold: true, color: _currentService.finalBalanceCustomerDebt > 0 ? Colors.red : Colors.green),
-          ]),
-          if (_currentService.purchasePricePerTon > 0) ...[
-            const SizedBox(height: 16),
-            _buildInfoSection('وضعیت تسویه با فروشنده', [
-              _buildInfoRow('جمع کل خرید از فروشنده', "${AppFormatters.formatCurrency(_currentService.totalPurchaseAmount)} تومان"),
-              _buildInfoRow('پرداختی نقد/وصول شده', "${AppFormatters.formatCurrency(_currentService.totalPaidToSeller)} تومان", color: Colors.green),
-              _buildInfoRow('چک معلق ما نزد فروشنده', "${AppFormatters.formatCurrency(_currentService.pendingSellerChecks)} تومان", color: Colors.orange),
-              const Divider(),
-              _buildInfoRow('مانده بدهی نهایی ما', "${AppFormatters.formatCurrency(_currentService.finalBalanceToSeller)} تومان", isBold: true, color: _currentService.finalBalanceToSeller > 0 ? Colors.red : Colors.green),
-            ]),
-          ],
-          const SizedBox(height: 16),
-          _buildInfoSection('اطلاعات تکمیلی و سود', [
-            if (_currentService.fareAccountNumber != null && _currentService.fareAccountNumber!.isNotEmpty) ...[
-              const Text('اطلاعات حساب واریز کرایه:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-              _buildInfoRow('شماره حساب/کارت', _currentService.fareAccountNumber!.toPersianDigit()),
-              _buildInfoRow('صاحب حساب', _currentService.fareAccountOwner ?? "---"),
-              _buildInfoRow('بانک', _currentService.fareBankName ?? "---"),
-              const Divider(),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(File(path), width: 80, height: 80, fit: BoxFit.cover),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCard({required String title, required IconData icon, required List<Widget> children}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: Colors.blue),
+              const SizedBox(width: 8),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ],
-            _buildInfoRow('سود خالص این سرویس', "${AppFormatters.formatCurrency(_currentService.netProfit)} تومان", isBold: true, color: Colors.green),
-            if (_currentService.purchaseInvoiceImagePath != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: OutlinedButton.icon(
-                  onPressed: () => _showImageDialog(_currentService.purchaseInvoiceImagePath!, 'فاکتور خرید'),
-                  icon: const Icon(Icons.receipt_outlined),
-                  label: const Text('مشاهده فاکتور خرید'),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 45)),
+          ),
+          const Divider(height: 24),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataRow(String label, String value, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActions(ThemeData theme) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddPaymentScreen(service: _currentService, isCollection: true)),
+                  );
+                  if (result == true) _refreshService();
+                },
+                icon: const Icon(Icons.add_card),
+                label: const Text("دریافت از مشتری"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green, 
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
-          ]),
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentsTab() {
-    final customerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.fromCustomer).toList();
-    final sellerPayments = _allRelatedPayments.where((p) => p.type == PaymentType.toSeller).toList();
-    final logisticsPayments = _allRelatedPayments.where((p) => p.type == PaymentType.toLogistics).toList();
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildPaymentListSection('تراکنش‌های مشتری', customerPayments, Colors.blue),
-        const SizedBox(height: 24),
-        if (_currentService.purchasePricePerTon > 0)
-          _buildPaymentListSection('تراکنش‌های مربوط به فروشنده', sellerPayments, Colors.red),
-        const SizedBox(height: 24),
-        if (_currentService.logisticsCo != null || _currentService.expenses.owedToLogistics > 0)
-          _buildPaymentListSection('تراکنش‌های مربوط به باربری', logisticsPayments, Colors.orange),
-        const SizedBox(height: 80),
-      ],
-    );
-  }
-
-  void _editService() async {
-    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => AddServiceScreen(serviceToEdit: _currentService)));
-    if (result == true) _refreshData();
-  }
-
-  Future<void> _confirmDeleteService() async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف سرویس'),
-        content: const Text('آیا مطمئن هستید؟ تمام تراکنش‌های ثبت شده برای این سرویس نیز حذف خواهند شد.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('حذف')),
-        ],
-      ),
-    );
-    if (res == true) {
-      await _repository.deleteService(_currentService.id);
-      if (mounted) Navigator.pop(context, true);
-    }
-  }
-
-  void _showImageDialog(String path, String title) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AppBar(title: Text(title), leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context))),
-            Flexible(child: SingleChildScrollView(child: Image.file(File(path), fit: BoxFit.contain))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPaymentTypePicker() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(leading: const Icon(Icons.add_chart, color: Colors.blue), title: const Text('دریافتی از مشتری'), onTap: () => _navToAddPayment(true)),
-            if (_currentService.purchasePricePerTon > 0)
-              ListTile(leading: const Icon(Icons.payments_outlined, color: Colors.red), title: const Text('پرداختی به فروشنده'), onTap: () => _navToAddPayment(false)),
-            if (_currentService.logisticsCo != null)
-              ListTile(leading: const Icon(Icons.business_outlined, color: Colors.orange), title: const Text('پرداختی به باربری'), onTap: () => _navToAddPayment(false, isLogistics: true)),
-            ListTile(leading: const Icon(Icons.receipt_long, color: Colors.orange), title: const Text('ثبت هزینه جانبی'), onTap: () {
-              Navigator.pop(context);
-              _addExpenseToService();
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _addExpenseToService() {
-    final titleController = TextEditingController();
-    final amountController = TextEditingController();
-    String? imagePath;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('افزودن هزینه جانبی'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: titleController, decoration: const InputDecoration(labelText: 'عنوان هزینه')),
-              const SizedBox(height: 12),
-              TextField(controller: amountController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'مبلغ (تومان)')),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
                 onPressed: () async {
-                  final picker = ImagePicker();
-                  final picked = await picker.pickImage(source: ImageSource.gallery);
-                  if (picked != null) setDialogState(() => imagePath = picked.path);
-                },
-                icon: const Icon(Icons.image_outlined),
-                label: Text(imagePath == null ? 'انتخاب رسید' : 'رسید انتخاب شد'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('انصراف')),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleController.text.isNotEmpty && amountController.text.isNotEmpty) {
-                  final newExpense = OtherExpense(
-                    title: titleController.text,
-                    amount: double.tryParse(amountController.text) ?? 0,
-                    receiptImagePath: imagePath,
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddPaymentScreen(service: _currentService, isCollection: false)),
                   );
-                  
-                  _currentService.expenses.otherExpenses.add(newExpense);
-                  await _repository.saveService(_currentService);
-                  
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _refreshData();
-                  }
-                }
-              },
-              child: const Text('افزودن'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _removeExpenseFromService(OtherExpense exp) async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حذف هزینه'),
-        content: Text('آیا از حذف "${exp.title}" مطمئن هستید؟'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('انصراف')),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('حذف')),
-        ],
-      ),
-    );
-
-    if (res == true) {
-      _currentService.expenses.otherExpenses.remove(exp);
-      await _repository.saveService(_currentService);
-      _refreshData();
-    }
-  }
-
-  void _navToAddPayment(bool isCollection, {bool isLogistics = false}) async {
-    Navigator.pop(context);
-    final result = await Navigator.push(
-      context, 
-      MaterialPageRoute(
-        builder: (context) => AddPaymentScreen(
-          service: _currentService, 
-          isCollection: isCollection,
-          customLogisticsId: isLogistics ? _currentService.logisticsCo?.id : null,
-        )
-      )
-    );
-    if (result == true) _refreshData();
-  }
-
-  Widget _buildPaymentListSection(String title, List<Payment> payments, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        if (payments.isEmpty) const Text('تراکنشی ثبت نشده', style: TextStyle(color: Colors.grey, fontSize: 12))
-        else ...payments.map((p) => Card(
-          elevation: p.serviceId == _currentService.id ? 2 : 0, 
-          color: p.serviceId == _currentService.id ? Colors.white : Colors.grey.shade50,
-          child: ListTile(
-            onLongPress: () => _showPaymentOptions(p),
-            leading: Icon(
-              p.method == PaymentMethod.check ? Icons.assignment : Icons.account_balance_wallet,
-              color: p.method == PaymentMethod.check && !p.isCleared ? Colors.orange : color,
-            ),
-            title: Text("${AppFormatters.formatCurrency(p.amount)} تومان", style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("${p.date.toPersianDate()} - ${p.description ?? ''}"),
-                if (p.method == PaymentMethod.check) ...[
-                  Text("سررسید: ${p.checkDueDate?.toPersianDate()}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange)),
-                  Text("بانک: ${p.bankName ?? ''} - ش: ${p.checkNumber ?? ''}", style: const TextStyle(fontSize: 10)),
-                ],
-                if (p.serviceId != _currentService.id)
-                  const Text("(تراکنش کلی مربوط به طرف حساب)", style: TextStyle(fontSize: 9, color: Colors.grey, fontStyle: FontStyle.italic)),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (p.receiptImagePath != null || p.checkImagePath != null)
-                  IconButton(
-                    icon: const Icon(Icons.image_outlined, color: Colors.blueGrey),
-                    onPressed: () => _showImageDialog((p.receiptImagePath ?? p.checkImagePath)!, 'تصویر رسید/چک'),
-                  ),
-                if (p.method == PaymentMethod.check && !p.isCleared) 
-                  const Icon(Icons.pending, color: Colors.orange, size: 20)
-                else if (p.isCleared)
-                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
-              ],
-            ),
-          ),
-        )).toList(),
-      ],
-    );
-  }
-
-  void _showPaymentOptions(Payment p) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (p.method == PaymentMethod.check)
-              ListTile(
-                leading: Icon(p.isCleared ? Icons.history : Icons.check_circle, color: Colors.blue),
-                title: Text(p.isCleared ? "تغییر وضعیت به در جریان" : "تایید وصول چک"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleCheckStatus(p);
+                  if (result == true) _refreshService();
                 },
+                icon: const Icon(Icons.payments_outlined),
+                label: const Text("پرداخت به فروشنده"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue, 
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
-            ListTile(
-              leading: const Icon(Icons.delete_forever, color: Colors.red),
-              title: const Text("حذف کامل این تراکنش"),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteConfirm(p);
-              },
             ),
           ],
         ),
@@ -557,38 +344,26 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> with Single
     );
   }
 
-  void _showDeleteConfirm(Payment p) {
+  void _confirmDelete() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("حذف تراکنش"),
-        content: const Text("آیا از حذف دائمی این تراکنش اطمینان دارید؟ این عمل قابل بازگشت نیست."),
+        title: const Text("تایید حذف"),
+        content: const Text("آیا از حذف این سرویس و تمام تراکنش‌های مرتبط با آن اطمینان دارید؟"),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("انصراف")),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              if (p.id != null) _deletePayment(p.id!);
-            }, 
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text("حذف نهایی")
+          TextButton(
+            onPressed: () async {
+              await _repository.deleteService(_currentService.id);
+              if (mounted) {
+                Navigator.pop(context);
+                Navigator.pop(context, true);
+              }
+            },
+            child: const Text("حذف نهایی", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
-  }
-
-  Widget _buildInfoSection(String title, List<Widget> children) {
-    return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-      const Divider(), ...children,
-    ])));
-  }
-
-  Widget _buildInfoRow(String label, String value, {bool isBold = false, Color? color}) {
-    return Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-      Text(value, style: TextStyle(fontSize: 13, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
-    ]));
   }
 }

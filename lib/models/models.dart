@@ -122,6 +122,7 @@ class LogisticsCo {
   final String id;
   final String name;
   final String phone;
+  final String? location; // شهر یا استان
   final String? bankName;
   final String? accountNumber;
   final String? accountOwner;
@@ -130,6 +131,7 @@ class LogisticsCo {
     required this.id, 
     required this.name, 
     required this.phone,
+    this.location,
     this.bankName,
     this.accountNumber,
     this.accountOwner,
@@ -147,6 +149,7 @@ class LogisticsCo {
     'id': id,
     'name': name,
     'phone': phone,
+    'location': location,
     'bankName': bankName,
     'accountNumber': accountNumber,
     'accountOwner': accountOwner,
@@ -156,6 +159,7 @@ class LogisticsCo {
     id: map['id'],
     name: map['name'],
     phone: map['phone'],
+    location: map['location'],
     bankName: map['bankName'],
     accountNumber: map['accountNumber'],
     accountOwner: map['accountOwner'],
@@ -415,6 +419,19 @@ class ServiceExpenses {
   bool disinfectionInBoL;
   double commission;
   bool commissionInBoL;
+  
+  // New specific fields
+  double loadingWeighbridge;
+  bool loadingWeighbridgeInBoL;
+  double loaderLoading;
+  bool loaderLoadingInBoL;
+  double tallyClerk;
+  bool tallyClerkInBoL;
+  double unloadingWeighbridge;
+  bool unloadingWeighbridgeInBoL;
+  double unloadingWorker;
+  bool unloadingWorkerInBoL;
+
   List<OtherExpense> otherExpenses;
   bool includeInBillOfLading;
 
@@ -432,12 +449,24 @@ class ServiceExpenses {
     this.disinfectionInBoL = false,
     this.commission = 0,
     this.commissionInBoL = true,
+    this.loadingWeighbridge = 0,
+    this.loadingWeighbridgeInBoL = false,
+    this.loaderLoading = 0,
+    this.loaderLoadingInBoL = false,
+    this.tallyClerk = 0,
+    this.tallyClerkInBoL = false,
+    this.unloadingWeighbridge = 0,
+    this.unloadingWeighbridgeInBoL = false,
+    this.unloadingWorker = 0,
+    this.unloadingWorkerInBoL = false,
     this.otherExpenses = const [],
     this.includeInBillOfLading = false,
   });
 
   /// جمع کل مخارج (هر نوع هزینه‌ای که برای این سرویس انجام شده)
-  double get total => billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + otherExpenses.fold(0, (sum, item) => sum + item.amount);
+  double get total => billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + 
+      loadingWeighbridge + loaderLoading + tallyClerk + unloadingWeighbridge + unloadingWorker +
+      otherExpenses.fold(0, (sum, item) => sum + item.amount);
 
   /// مبلغی که باید به باربری پرداخت شود (پایه بارنامه + هزینه‌های انتخابی)
   double get owedToLogistics {
@@ -450,6 +479,12 @@ class ServiceExpenses {
     if (loadingTipInBoL) amount += loadingTip;
     if (unloadingTipInBoL) amount += unloadingTip;
     if (disinfectionInBoL) amount += disinfectionCost;
+    if (loadingWeighbridgeInBoL) amount += loadingWeighbridge;
+    if (loaderLoadingInBoL) amount += loaderLoading;
+    if (tallyClerkInBoL) amount += tallyClerk;
+    if (unloadingWeighbridgeInBoL) amount += unloadingWeighbridge;
+    if (unloadingWorkerInBoL) amount += unloadingWorker;
+
     for (var exp in otherExpenses) {
       if (exp.includeInBoL) amount += exp.amount;
     }
@@ -470,6 +505,16 @@ class ServiceExpenses {
     'disinfectionInBoL': disinfectionInBoL,
     'commission': commission,
     'commissionInBoL': commissionInBoL,
+    'loadingWeighbridge': loadingWeighbridge,
+    'loadingWeighbridgeInBoL': loadingWeighbridgeInBoL,
+    'loaderLoading': loaderLoading,
+    'loaderLoadingInBoL': loaderLoadingInBoL,
+    'tallyClerk': tallyClerk,
+    'tallyClerkInBoL': tallyClerkInBoL,
+    'unloadingWeighbridge': unloadingWeighbridge,
+    'unloadingWeighbridgeInBoL': unloadingWeighbridgeInBoL,
+    'unloadingWorker': unloadingWorker,
+    'unloadingWorkerInBoL': unloadingWorkerInBoL,
     'otherExpenses': otherExpenses.map((e) => e.toMap()).toList(),
     'includeInBillOfLading': includeInBillOfLading,
   };
@@ -490,6 +535,16 @@ class ServiceExpenses {
       disinfectionInBoL: map['disinfectionInBoL'] ?? false,
       commission: (map['commission'] ?? 0 as num).toDouble(),
       commissionInBoL: map['commissionInBoL'] ?? true,
+      loadingWeighbridge: (map['loadingWeighbridge'] ?? 0 as num).toDouble(),
+      loadingWeighbridgeInBoL: map['loadingWeighbridgeInBoL'] ?? false,
+      loaderLoading: (map['loaderLoading'] ?? 0 as num).toDouble(),
+      loaderLoadingInBoL: map['loaderLoadingInBoL'] ?? false,
+      tallyClerk: (map['tallyClerk'] ?? 0 as num).toDouble(),
+      tallyClerkInBoL: map['tallyClerkInBoL'] ?? false,
+      unloadingWeighbridge: (map['unloadingWeighbridge'] ?? 0 as num).toDouble(),
+      unloadingWeighbridgeInBoL: map['unloadingWeighbridgeInBoL'] ?? false,
+      unloadingWorker: (map['unloadingWorker'] ?? 0 as num).toDouble(),
+      unloadingWorkerInBoL: map['unloadingWorkerInBoL'] ?? false,
       otherExpenses: othersList.map((e) => OtherExpense.fromMap(Map<String, dynamic>.from(e))).toList(),
       includeInBillOfLading: map['includeInBillOfLading'] ?? false,
     );
@@ -610,6 +665,8 @@ class LoadService {
   final String origin;
   final String destination;
   final DateTime date;
+  final DateTime? loadingDateTime;
+  final DateTime? unloadingDateTime;
   final double weight;
   final double transportPricePerTon;
   final double purchasePricePerTon;
@@ -619,6 +676,8 @@ class LoadService {
   final List<Payment> paymentsToDriver;
   final ServiceExpenses expenses;
   final String? purchaseInvoiceImagePath;
+  final String? billOfLadingImagePath; // عکس بارنامه
+  final String? weighbridgeImagePath; // عکس باسکول
 
   final String? fareAccountNumber;
   final String? fareAccountOwner;
@@ -626,9 +685,14 @@ class LoadService {
 
   final String? logisticsName;
   final String? logisticsPhone;
+  final String? logisticsLocation;
 
   final bool isAgreedFreight;
   final double agreedFreightAmount;
+
+  final double driverAgreementPercentage;
+  final bool isOwnerDriver;
+  final double extraDriverPay;
 
   LoadService({
     required this.id,
@@ -642,6 +706,8 @@ class LoadService {
     required this.origin,
     required this.destination,
     required this.date,
+    this.loadingDateTime,
+    this.unloadingDateTime,
     required this.weight,
     required this.transportPricePerTon,
     this.purchasePricePerTon = 0,
@@ -651,13 +717,19 @@ class LoadService {
     this.paymentsToDriver = const [],
     required this.expenses,
     this.purchaseInvoiceImagePath,
+    this.billOfLadingImagePath,
+    this.weighbridgeImagePath,
     this.fareAccountNumber,
     this.fareAccountOwner,
     this.fareBankName,
     this.logisticsName,
     this.logisticsPhone,
+    this.logisticsLocation,
     this.isAgreedFreight = false,
     this.agreedFreightAmount = 0,
+    this.driverAgreementPercentage = 0,
+    this.isOwnerDriver = false,
+    this.extraDriverPay = 0,
   });
 
   double get totalPurchaseAmount => weight * purchasePricePerTon;
@@ -712,6 +784,13 @@ class LoadService {
   /// مبلغ "صافی" که راننده باید از باربری دریافت کند: کرایه حمل منهای مبالغ بارنامه
   double get driverNetPay => totalTransportAmount - expenses.owedToLogistics;
 
+  /// حقوق راننده بر اساس درصد توافقی از کرایه کل + اضافه پرداختی
+  double get driverSalary => (totalTransportAmount * driverAgreementPercentage / 100) + extraDriverPay;
+
+  /// سهم مالک ماشین پس از کسر حقوق راننده (اگر راننده و مالک یکی نباشند)
+  /// اگر راننده و مالک یکی باشند، سهم مالک همان سود خالص است.
+  double get ownerShare => isOwnerDriver ? netProfit : netProfit - driverSalary;
+
   bool get isSellerSettled => remainingDebtToSeller <= 0;
   bool get isCustomerSettled => remainingCustomerDebt <= 0;
   bool get isLogisticsSettled => remainingLogisticsDebt <= 0;
@@ -729,18 +808,26 @@ class LoadService {
       'origin': origin,
       'destination': destination,
       'date': date.toIso8601String(),
+      'loadingDateTime': loadingDateTime?.toIso8601String(),
+      'unloadingDateTime': unloadingDateTime?.toIso8601String(),
       'weight': weight,
       'transportPricePerTon': transportPricePerTon,
       'purchasePricePerTon': purchasePricePerTon,
       'expenses': jsonEncode(expenses.toMap()),
       'purchaseInvoiceImagePath': purchaseInvoiceImagePath,
+      'billOfLadingImagePath': billOfLadingImagePath,
+      'weighbridgeImagePath': weighbridgeImagePath,
       'fareAccountNumber': fareAccountNumber,
       'fareAccountOwner': fareAccountOwner,
       'fareBankName': fareBankName,
       'logisticsName': logisticsName,
       'logisticsPhone': logisticsPhone,
+      'logisticsLocation': logisticsLocation,
       'isAgreedFreight': isAgreedFreight ? 1 : 0,
       'agreedFreightAmount': agreedFreightAmount,
+      'driverAgreementPercentage': driverAgreementPercentage,
+      'isOwnerDriver': isOwnerDriver ? 1 : 0,
+      'extraDriverPay': extraDriverPay,
     };
   }
 
@@ -769,6 +856,8 @@ class LoadService {
       origin: map['origin'] ?? '',
       destination: map['destination'] ?? '',
       date: DateTime.parse(map['date']),
+      loadingDateTime: map['loadingDateTime'] != null ? DateTime.parse(map['loadingDateTime']) : null,
+      unloadingDateTime: map['unloadingDateTime'] != null ? DateTime.parse(map['unloadingDateTime']) : null,
       weight: (map['weight'] as num).toDouble(),
       transportPricePerTon: (map['transportPricePerTon'] as num).toDouble(),
       purchasePricePerTon: (map['purchasePricePerTon'] as num).toDouble(),
@@ -778,13 +867,19 @@ class LoadService {
       paymentsToDriver: paymentsToDriver,
       expenses: ServiceExpenses.fromMap(jsonDecode(map['expenses'])),
       purchaseInvoiceImagePath: map['purchaseInvoiceImagePath'],
+      billOfLadingImagePath: map['billOfLadingImagePath'],
+      weighbridgeImagePath: map['weighbridgeImagePath'],
       fareAccountNumber: map['fareAccountNumber'],
       fareAccountOwner: map['fareAccountOwner'],
       fareBankName: map['fareBankName'],
       logisticsName: map['logisticsName'],
       logisticsPhone: map['logisticsPhone'],
+      logisticsLocation: map['logisticsLocation'],
       isAgreedFreight: (map['isAgreedFreight'] ?? 0) == 1,
       agreedFreightAmount: (map['agreedFreightAmount'] ?? 0 as num).toDouble(),
+      driverAgreementPercentage: (map['driverAgreementPercentage'] as num? ?? 0).toDouble(),
+      isOwnerDriver: (map['isOwnerDriver'] ?? 0) == 1,
+      extraDriverPay: (map['extraDriverPay'] as num? ?? 0).toDouble(),
     );
   }
 }

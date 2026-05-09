@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/biometric_helper.dart';
 import '../../../models/models.dart';
@@ -30,6 +31,22 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
       _customers = data;
       _isLoading = false;
     });
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('امکان برقراری تماس وجود ندارد')),
+        );
+      }
+    }
   }
 
   void _showCustomerDialog({Customer? customer}) {
@@ -131,7 +148,17 @@ class _ManageCustomersScreenState extends State<ManageCustomersScreen> {
                           child: const Icon(Icons.person, color: Colors.blue),
                         ),
                         title: Text(customer.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(customer.phone),
+                        subtitle: InkWell(
+                          onTap: customer.phone.isNotEmpty ? () => _makePhoneCall(customer.phone) : null,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.phone, size: 14, color: Colors.green),
+                              const SizedBox(width: 4),
+                              Text(customer.phone, style: const TextStyle(color: Colors.green)),
+                            ],
+                          ),
+                        ),
                         onTap: () {
                           Navigator.push(
                             context,

@@ -175,7 +175,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const ServicesScreen()));
+                            Navigator.of(context, rootNavigator: true).push(
+                              MaterialPageRoute(builder: (context) => const ServicesScreen()),
+                            );
                           },
                           child: const Text('مشاهده همه', style: TextStyle(fontSize: 12)),
                         ),
@@ -202,7 +204,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             width: double.infinity,
                             child: OutlinedButton(
                               onPressed: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (context) => const ServicesScreen()));
+                                Navigator.of(context, rootNavigator: true).push(
+                                  MaterialPageRoute(builder: (context) => const ServicesScreen()),
+                                );
                               },
                               child: const Text('مشاهده لیست کامل سرویس‌ها'),
                             ),
@@ -217,8 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
-          final result = await Navigator.push(
-            context,
+          final result = await Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(builder: (context) => const AddServiceScreen()),
           );
           if (result == true) _loadData();
@@ -318,8 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (check.serviceId != null) {
                           try {
                             final service = _allServices.firstWhere((s) => s.id == check.serviceId);
-                            Navigator.push(
-                              context,
+                            Navigator.of(context, rootNavigator: true).push(
                               MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: service)),
                             ).then((_) => _loadData());
                           } catch (_) {
@@ -414,8 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () async {
-          await Navigator.push(
-            context,
+          await Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(builder: (context) => ServiceDetailsScreen(service: service)),
           );
           _loadData();

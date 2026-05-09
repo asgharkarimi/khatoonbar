@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_service.dart';
@@ -65,6 +66,14 @@ class _DriverLedgerScreenState extends State<DriverLedgerScreen> with SingleTick
     });
   }
 
+  Future<void> _makePhoneCall() async {
+    if (widget.driver.phone.isEmpty) return;
+    final Uri launchUri = Uri(scheme: 'tel', path: widget.driver.phone);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
+
   Future<void> _toggleCheckStatus(Payment p) async {
     final updatedPayment = Payment(
       id: p.id,
@@ -122,6 +131,12 @@ class _DriverLedgerScreenState extends State<DriverLedgerScreen> with SingleTick
       appBar: AppBar(
         title: Text("صورت‌حساب راننده: ${widget.driver.fullName}"),
         actions: [
+          if (widget.driver.phone.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.phone_in_talk, color: Colors.green),
+              onPressed: _makePhoneCall,
+              tooltip: 'تماس با راننده',
+            ),
           if (widget.driver.accountNumber != null && widget.driver.accountNumber!.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.copy_all_outlined),

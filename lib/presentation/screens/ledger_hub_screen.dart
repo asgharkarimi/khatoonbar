@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/data/service_repository.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/models.dart';
@@ -69,7 +70,6 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
       _logisticsBalances[l.id] = await _repository.getLogisticsBalance(l.id);
     }
     for (var d in drivers) {
-      // For drivers, balance is Profit - Paid
       final services = await _repository.getAllServices();
       final payments = await _repository.getPayments();
       final driverServices = services.where((s) => s.driver.id == d.id).toList();
@@ -89,6 +89,13 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
       _onSearchChanged(_searchController.text);
       _isLoading = false;
     });
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -116,9 +123,6 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
         title: const Text('دفتر حساب و مالی'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: false,
-          labelPadding: EdgeInsets.zero,
-          indicatorSize: TabBarIndicatorSize.tab,
           tabs: const [
             Tab(text: 'مشتریان', icon: Icon(Icons.people)),
             Tab(text: 'فروشندگان', icon: Icon(Icons.storefront)),
@@ -139,21 +143,9 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
                     decoration: InputDecoration(
                       hintText: 'جستجو...',
                       prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchController.clear();
-                                _onSearchChanged('');
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       filled: true,
                       fillColor: Colors.grey.shade50,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                   ),
                 ),
@@ -174,21 +166,18 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   }
 
   Widget _buildCustomerList() {
-    if (_filteredCustomers.isEmpty) {
-      return Center(child: Text(_searchController.text.isEmpty ? 'مشتری‌ای ثبت نشده است' : 'موردی یافت نشد'));
-    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredCustomers.length,
       itemBuilder: (context, index) {
         final customer = _filteredCustomers[index];
-        final balance = _customerBalances[customer.id] ?? 0;
         return _buildLedgerTile(
           title: customer.fullName,
           subtitle: customer.village.isNotEmpty ? "منطقه: ${customer.village}" : "بدون آدرس",
+          phone: customer.phone,
           icon: Icons.person,
           color: Colors.blue,
-          amount: balance,
+          amount: _customerBalances[customer.id] ?? 0,
           amountLabel: "مانده طلب:",
           onTap: () async {
             await Navigator.push(context, MaterialPageRoute(builder: (context) => CustomerLedgerScreen(customer: customer)));
@@ -200,21 +189,17 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   }
 
   Widget _buildSellerList() {
-    if (_filteredSellers.isEmpty) {
-      return Center(child: Text(_searchController.text.isEmpty ? 'فروشنده‌ای ثبت نشده است' : 'موردی یافت نشد'));
-    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredSellers.length,
       itemBuilder: (context, index) {
         final seller = _filteredSellers[index];
-        final balance = _sellerBalances[seller.id] ?? 0;
         return _buildLedgerTile(
           title: seller.name,
           subtitle: "محصول: ${seller.product}",
           icon: Icons.storefront,
           color: Colors.teal,
-          amount: balance,
+          amount: _sellerBalances[seller.id] ?? 0,
           amountLabel: "بدهی ما:",
           onTap: () async {
             await Navigator.push(context, MaterialPageRoute(builder: (context) => SellerLedgerScreen(seller: seller)));
@@ -226,21 +211,18 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   }
 
   Widget _buildLogisticsList() {
-    if (_filteredLogistics.isEmpty) {
-      return Center(child: Text(_searchController.text.isEmpty ? 'باربری‌ای ثبت نشده است' : 'موردی یافت نشد'));
-    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredLogistics.length,
       itemBuilder: (context, index) {
         final logistics = _filteredLogistics[index];
-        final balance = _logisticsBalances[logistics.id] ?? 0;
         return _buildLedgerTile(
           title: logistics.name,
           subtitle: "تلفن: ${logistics.phone}",
+          phone: logistics.phone,
           icon: Icons.business_outlined,
           color: Colors.orange,
-          amount: balance,
+          amount: _logisticsBalances[logistics.id] ?? 0,
           amountLabel: "بدهی بارنامه:",
           onTap: () async {
             await Navigator.push(context, MaterialPageRoute(builder: (context) => LogisticsLedgerScreen(logisticsCo: logistics)));
@@ -252,21 +234,18 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   }
 
   Widget _buildDriverList() {
-    if (_filteredDrivers.isEmpty) {
-      return Center(child: Text(_searchController.text.isEmpty ? 'راننده‌ای ثبت نشده است' : 'موردی یافت نشد'));
-    }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _filteredDrivers.length,
       itemBuilder: (context, index) {
         final driver = _filteredDrivers[index];
-        final balance = _driverBalances[driver.id] ?? 0;
         return _buildLedgerTile(
           title: driver.fullName,
           subtitle: "تلفن: ${driver.phone}",
+          phone: driver.phone,
           icon: Icons.person_pin,
           color: Colors.teal,
-          amount: balance,
+          amount: _driverBalances[driver.id] ?? 0,
           amountLabel: "مانده طلب راننده:",
           onTap: () async {
             await Navigator.push(context, MaterialPageRoute(builder: (context) => DriverLedgerScreen(driver: driver)));
@@ -280,28 +259,34 @@ class _LedgerHubScreenState extends State<LedgerHubScreen> with SingleTickerProv
   Widget _buildLedgerTile({
     required String title,
     required String subtitle,
+    String? phone,
     required IconData icon,
     required Color color,
     required double amount,
     required String amountLabel,
     required VoidCallback onTap,
   }) {
-    Color amountColor = amount > 0 ? Colors.red.shade800 : (amount < 0 ? Colors.green.shade800 : Colors.blueGrey);
-    if (icon == Icons.person || icon == Icons.person_pin) { // For customers & drivers, positive balance is their claim
-       amountColor = amount > 0 ? Colors.teal.shade800 : (amount < 0 ? Colors.red.shade800 : Colors.blueGrey);
-       if (icon == Icons.person) amountColor = amount > 0 ? Colors.blue.shade800 : amountColor;
-    }
-
+    Color amountColor = amount > 0 ? Colors.teal.shade800 : (amount < 0 ? Colors.red.shade800 : Colors.blueGrey);
+    
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color),
-        ),
+        leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 11)),
+        subtitle: phone != null && phone.isNotEmpty 
+          ? InkWell(
+              onTap: () => _makePhoneCall(phone),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.phone, size: 12, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text(phone, style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            )
+          : Text(subtitle, style: const TextStyle(fontSize: 11)),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,

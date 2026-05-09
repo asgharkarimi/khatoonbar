@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../models/models.dart';
 import '../../widgets/phone_input.dart';
@@ -28,6 +29,22 @@ class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
       _logisticsCos = data;
       _isLoading = false;
     });
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('امکان برقراری تماس وجود ندارد')),
+        );
+      }
+    }
   }
 
   void _showLogisticsCoDialog({LogisticsCo? co}) {
@@ -117,7 +134,17 @@ class _ManageLogisticsCosScreenState extends State<ManageLogisticsCosScreen> {
                           child: const Icon(Icons.business, color: Colors.blue),
                         ),
                         title: Text(co.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(co.phone),
+                        subtitle: InkWell(
+                          onTap: co.phone.isNotEmpty ? () => _makePhoneCall(co.phone) : null,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.phone, size: 14, color: Colors.green),
+                              const SizedBox(width: 4),
+                              Text(co.phone, style: const TextStyle(color: Colors.green)),
+                            ],
+                          ),
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:persian_number_utility/persian_number_utility.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/database/database_helper.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/pdf_service.dart';
@@ -66,6 +67,14 @@ class _LogisticsLedgerScreenState extends State<LogisticsLedgerScreen> with Sing
     });
   }
 
+  Future<void> _makePhoneCall() async {
+    if (widget.logisticsCo.phone.isEmpty) return;
+    final Uri launchUri = Uri(scheme: 'tel', path: widget.logisticsCo.phone);
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
+
   Future<void> _toggleCheckStatus(Payment p) async {
     final updatedPayment = Payment(
       id: p.id,
@@ -122,6 +131,12 @@ class _LogisticsLedgerScreenState extends State<LogisticsLedgerScreen> with Sing
       appBar: AppBar(
         title: Text("صورت‌حساب باربری: ${widget.logisticsCo.name}"),
         actions: [
+          if (widget.logisticsCo.phone.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.phone_in_talk, color: Colors.green),
+              onPressed: _makePhoneCall,
+              tooltip: 'تماس با باربری',
+            ),
           if (widget.logisticsCo.accountNumber != null && widget.logisticsCo.accountNumber!.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.copy_all_outlined),
