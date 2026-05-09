@@ -82,11 +82,12 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _selectedIndex = 0;
+  // ایندکس 1 برای اینکه تب وسط (خانه) در شروع برنامه باز شود
+  int _selectedIndex = 1;
 
   final List<Widget> _screens = [
-    const HomeScreen(),
     const ReportsScreen(),
+    const HomeScreen(),
     const SettingsScreen(),
   ];
 
@@ -111,14 +112,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           },
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
-              activeIcon: Icon(Icons.home),
-              label: 'خانه',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(Icons.analytics_outlined),
               activeIcon: Icon(Icons.analytics),
               label: 'گزارشات',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_outlined),
+              activeIcon: Icon(Icons.home),
+              label: 'خانه',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings_outlined),
