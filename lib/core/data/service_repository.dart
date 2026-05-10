@@ -27,6 +27,13 @@ class ServiceRepository {
     for (var exp in service.expenses.otherExpenses) {
       await addSuggestion('expense_titles', exp.title);
     }
+
+    // ذخیره پیشنهادات نام عوارضی
+    for (var toll in service.expenses.tolls) {
+      if (toll.name.isNotEmpty) {
+        await addSuggestion('toll_names', toll.name);
+      }
+    }
   }
   
   Future<List<LoadService>> getAllServices() async => await _dbHelper.getAllServices();

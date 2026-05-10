@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'core/database/database_helper.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/notification_service.dart';
 import 'presentation/screens/home_screen.dart';
@@ -31,6 +32,9 @@ void main() async {
       Hive.openBox('transactions'),
       Hive.openBox('suggestions'),
     ]);
+
+    // بارگذاری داده‌های اولیه در صورت خالی بودن دیتابیس
+    await DatabaseHelper.instance.seedDefaultData();
 
   } catch (e) {
     debugPrint("خطا در راه‌اندازی دیتابیس: $e");

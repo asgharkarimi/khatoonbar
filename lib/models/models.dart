@@ -283,6 +283,7 @@ class Seller {
   final String id;
   final String name;
   final String product;
+  final String? phone;
   final String? bankName;
   final String? accountNumber;
   final String? accountOwner;
@@ -291,6 +292,7 @@ class Seller {
     required this.id, 
     required this.name, 
     required this.product,
+    this.phone,
     this.bankName,
     this.accountNumber,
     this.accountOwner,
@@ -308,6 +310,7 @@ class Seller {
     'id': id,
     'name': name,
     'product': product,
+    'phone': phone,
     'bankName': bankName,
     'accountNumber': accountNumber,
     'accountOwner': accountOwner,
@@ -317,6 +320,7 @@ class Seller {
     id: map['id'],
     name: map['name'],
     product: map['product'],
+    phone: map['phone'],
     bankName: map['bankName'],
     accountNumber: map['accountNumber'],
     accountOwner: map['accountOwner'],
@@ -405,76 +409,115 @@ class OtherExpense {
   );
 }
 
+class TollItem {
+  final String name;
+  final double amount;
+
+  TollItem({required this.name, required this.amount});
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'amount': amount,
+  };
+
+  factory TollItem.fromMap(Map<String, dynamic> map) => TollItem(
+    name: map['name'] ?? '',
+    amount: (map['amount'] ?? 0 as num).toDouble(),
+  );
+}
+
 class ServiceExpenses {
   double billOfLadingCost;
-  double tollCost;
+  List<TollItem> tolls;
   bool tollInBoL;
+  String? tollImagePath;
   double fuelCost;
   bool fuelInBoL;
+  String? fuelImagePath;
   double loadingTip;
   bool loadingTipInBoL;
+  String? loadingTipImagePath;
   double unloadingTip;
   bool unloadingTipInBoL;
+  String? unloadingTipImagePath;
   double disinfectionCost;
   bool disinfectionInBoL;
+  String? disinfectionImagePath;
   double commission;
   bool commissionInBoL;
+  String? commissionImagePath;
   
-  // New specific fields
   double loadingWeighbridge;
   bool loadingWeighbridgeInBoL;
+  String? loadingWeighbridgeImagePath;
   double loaderLoading;
   bool loaderLoadingInBoL;
+  String? loaderLoadingImagePath;
   double tallyClerk;
   bool tallyClerkInBoL;
+  String? tallyClerkImagePath;
   double unloadingWeighbridge;
   bool unloadingWeighbridgeInBoL;
+  String? unloadingWeighbridgeImagePath;
   double unloadingWorker;
   bool unloadingWorkerInBoL;
+  String? unloadingWorkerImagePath;
 
   List<OtherExpense> otherExpenses;
   bool includeInBillOfLading;
 
   ServiceExpenses({
     this.billOfLadingCost = 0,
-    this.tollCost = 0,
+    this.tolls = const [],
     this.tollInBoL = false,
+    this.tollImagePath,
     this.fuelCost = 0,
     this.fuelInBoL = false,
+    this.fuelImagePath,
     this.loadingTip = 0,
     this.loadingTipInBoL = false,
+    this.loadingTipImagePath,
     this.unloadingTip = 0,
     this.unloadingTipInBoL = false,
+    this.unloadingTipImagePath,
     this.disinfectionCost = 0,
     this.disinfectionInBoL = false,
+    this.disinfectionImagePath,
     this.commission = 0,
     this.commissionInBoL = true,
+    this.commissionImagePath,
     this.loadingWeighbridge = 0,
     this.loadingWeighbridgeInBoL = false,
+    this.loadingWeighbridgeImagePath,
     this.loaderLoading = 0,
     this.loaderLoadingInBoL = false,
+    this.loaderLoadingImagePath,
     this.tallyClerk = 0,
     this.tallyClerkInBoL = false,
+    this.tallyClerkImagePath,
     this.unloadingWeighbridge = 0,
     this.unloadingWeighbridgeInBoL = false,
+    this.unloadingWeighbridgeImagePath,
     this.unloadingWorker = 0,
     this.unloadingWorkerInBoL = false,
+    this.unloadingWorkerImagePath,
     this.otherExpenses = const [],
     this.includeInBillOfLading = false,
   });
 
-  /// جمع کل مخارج (هر نوع هزینه‌ای که برای این سرویس انجام شده)
-  double get total => billOfLadingCost + tollCost + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + 
+  double get totalTolls => tolls.fold(0, (sum, item) => sum + item.amount);
+  double get tollCost => totalTolls;
+
+  double get total => billOfLadingCost + totalTolls + fuelCost + loadingTip + unloadingTip + disinfectionCost + commission + 
       loadingWeighbridge + loaderLoading + tallyClerk + unloadingWeighbridge + unloadingWorker +
       otherExpenses.fold(0, (sum, item) => sum + item.amount);
 
-  /// مبلغی که باید به باربری پرداخت شود (پایه بارنامه + هزینه‌های انتخابی)
   double get owedToLogistics {
     if (includeInBillOfLading) return total;
     
     double amount = billOfLadingCost;
     if (commissionInBoL) amount += commission;
-    if (tollInBoL) amount += tollCost;
+    if (tollInBoL) amount += totalTolls;
     if (fuelInBoL) amount += fuelCost;
     if (loadingTipInBoL) amount += loadingTip;
     if (unloadingTipInBoL) amount += unloadingTip;
@@ -493,58 +536,85 @@ class ServiceExpenses {
 
   Map<String, dynamic> toMap() => {
     'billOfLadingCost': billOfLadingCost,
-    'tollCost': tollCost,
+    'tolls': tolls.map((e) => e.toMap()).toList(),
     'tollInBoL': tollInBoL,
+    'tollImagePath': tollImagePath,
     'fuelCost': fuelCost,
     'fuelInBoL': fuelInBoL,
+    'fuelImagePath': fuelImagePath,
     'loadingTip': loadingTip,
     'loadingTipInBoL': loadingTipInBoL,
+    'loadingTipImagePath': loadingTipImagePath,
     'unloadingTip': unloadingTip,
     'unloadingTipInBoL': unloadingTipInBoL,
+    'unloadingTipImagePath': unloadingTipImagePath,
     'disinfectionCost': disinfectionCost,
     'disinfectionInBoL': disinfectionInBoL,
+    'disinfectionImagePath': disinfectionImagePath,
     'commission': commission,
     'commissionInBoL': commissionInBoL,
+    'commissionImagePath': commissionImagePath,
     'loadingWeighbridge': loadingWeighbridge,
     'loadingWeighbridgeInBoL': loadingWeighbridgeInBoL,
+    'loadingWeighbridgeImagePath': loadingWeighbridgeImagePath,
     'loaderLoading': loaderLoading,
     'loaderLoadingInBoL': loaderLoadingInBoL,
+    'loaderLoadingImagePath': loaderLoadingImagePath,
     'tallyClerk': tallyClerk,
     'tallyClerkInBoL': tallyClerkInBoL,
+    'tallyClerkImagePath': tallyClerkImagePath,
     'unloadingWeighbridge': unloadingWeighbridge,
     'unloadingWeighbridgeInBoL': unloadingWeighbridgeInBoL,
+    'unloadingWeighbridgeImagePath': unloadingWeighbridgeImagePath,
     'unloadingWorker': unloadingWorker,
     'unloadingWorkerInBoL': unloadingWorkerInBoL,
+    'unloadingWorkerImagePath': unloadingWorkerImagePath,
     'otherExpenses': otherExpenses.map((e) => e.toMap()).toList(),
     'includeInBillOfLading': includeInBillOfLading,
   };
 
   factory ServiceExpenses.fromMap(Map<String, dynamic> map) {
     var othersList = map['otherExpenses'] as List? ?? [];
+    var tollsList = map['tolls'] as List? ?? [];
+    List<TollItem> finalTolls = tollsList.map((e) => TollItem.fromMap(Map<String, dynamic>.from(e))).toList();
+    if (finalTolls.isEmpty && map.containsKey('tollCost') && (map['tollCost'] ?? 0) > 0) {
+      finalTolls.add(TollItem(name: 'عوارض ثبت شده قبلی', amount: (map['tollCost'] as num).toDouble()));
+    }
     return ServiceExpenses(
       billOfLadingCost: (map['billOfLadingCost'] ?? 0 as num).toDouble(),
-      tollCost: (map['tollCost'] ?? 0 as num).toDouble(),
+      tolls: finalTolls,
       tollInBoL: map['tollInBoL'] ?? false,
+      tollImagePath: map['tollImagePath'],
       fuelCost: (map['fuelCost'] ?? 0 as num).toDouble(),
       fuelInBoL: map['fuelInBoL'] ?? false,
+      fuelImagePath: map['fuelImagePath'],
       loadingTip: (map['loadingTip'] ?? 0 as num).toDouble(),
       loadingTipInBoL: map['loadingTipInBoL'] ?? false,
+      loadingTipImagePath: map['loadingTipImagePath'],
       unloadingTip: (map['unloadingTip'] ?? 0 as num).toDouble(),
       unloadingTipInBoL: map['unloadingTipInBoL'] ?? false,
+      unloadingTipImagePath: map['unloadingTipImagePath'],
       disinfectionCost: (map['disinfectionCost'] ?? 0 as num).toDouble(),
       disinfectionInBoL: map['disinfectionInBoL'] ?? false,
+      disinfectionImagePath: map['disinfectionImagePath'],
       commission: (map['commission'] ?? 0 as num).toDouble(),
       commissionInBoL: map['commissionInBoL'] ?? true,
+      commissionImagePath: map['commissionImagePath'],
       loadingWeighbridge: (map['loadingWeighbridge'] ?? 0 as num).toDouble(),
       loadingWeighbridgeInBoL: map['loadingWeighbridgeInBoL'] ?? false,
+      loadingWeighbridgeImagePath: map['loadingWeighbridgeImagePath'],
       loaderLoading: (map['loaderLoading'] ?? 0 as num).toDouble(),
       loaderLoadingInBoL: map['loaderLoadingInBoL'] ?? false,
+      loaderLoadingImagePath: map['loaderLoadingImagePath'],
       tallyClerk: (map['tallyClerk'] ?? 0 as num).toDouble(),
       tallyClerkInBoL: map['tallyClerkInBoL'] ?? false,
+      tallyClerkImagePath: map['tallyClerkImagePath'],
       unloadingWeighbridge: (map['unloadingWeighbridge'] ?? 0 as num).toDouble(),
       unloadingWeighbridgeInBoL: map['unloadingWeighbridgeInBoL'] ?? false,
+      unloadingWeighbridgeImagePath: map['unloadingWeighbridgeImagePath'],
       unloadingWorker: (map['unloadingWorker'] ?? 0 as num).toDouble(),
       unloadingWorkerInBoL: map['unloadingWorkerInBoL'] ?? false,
+      unloadingWorkerImagePath: map['unloadingWorkerImagePath'],
       otherExpenses: othersList.map((e) => OtherExpense.fromMap(Map<String, dynamic>.from(e))).toList(),
       includeInBillOfLading: map['includeInBillOfLading'] ?? false,
     );
@@ -676,8 +746,8 @@ class LoadService {
   final List<Payment> paymentsToDriver;
   final ServiceExpenses expenses;
   final String? purchaseInvoiceImagePath;
-  final String? billOfLadingImagePath; // عکس بارنامه
-  final String? weighbridgeImagePath; // عکس باسکول
+  final String? billOfLadingImagePath;
+  final String? weighbridgeImagePath;
 
   final String? fareAccountNumber;
   final String? fareAccountOwner;
@@ -693,6 +763,7 @@ class LoadService {
   final double driverAgreementPercentage;
   final bool isOwnerDriver;
   final double extraDriverPay;
+  final bool isFinalized;
 
   LoadService({
     required this.id,
@@ -725,70 +796,38 @@ class LoadService {
     this.logisticsName,
     this.logisticsPhone,
     this.logisticsLocation,
+    this.isOwnerDriver = false,
     this.isAgreedFreight = false,
     this.agreedFreightAmount = 0,
     this.driverAgreementPercentage = 0,
-    this.isOwnerDriver = false,
     this.extraDriverPay = 0,
+    this.isFinalized = false,
   });
 
   double get totalPurchaseAmount => weight * purchasePricePerTon;
-  
-  double get totalPaidToSeller => paymentsToSeller
-      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
-      .fold(0.0, (sum, item) => sum + item.amount);
-      
-  double get pendingSellerChecks => paymentsToSeller
-      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
-      .fold(0.0, (sum, item) => sum + item.amount);
-
+  double get totalPaidToSeller => paymentsToSeller.where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check).fold(0.0, (sum, item) => sum + item.amount);
+  double get pendingSellerChecks => paymentsToSeller.where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending).fold(0.0, (sum, item) => sum + item.amount);
   double get remainingDebtToSeller => totalPurchaseAmount - totalPaidToSeller;
   double get finalBalanceToSeller => totalPurchaseAmount - totalPaidToSeller - pendingSellerChecks;
 
   double get totalTransportAmount => isAgreedFreight ? agreedFreightAmount : weight * transportPricePerTon;
   double get totalServicePriceForCustomer => totalPurchaseAmount + totalTransportAmount;
-  
-  double get totalCollectedFromCustomer => collectionsFromCustomer
-      .where((p) => p.status == CheckStatus.cleared || p.status == CheckStatus.transferred || p.method != PaymentMethod.check)
-      .fold(0.0, (sum, item) => sum + item.amount);
-
-  double get pendingCustomerChecks => collectionsFromCustomer
-      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
-      .fold(0.0, (sum, item) => sum + item.amount);
-
+  double get totalCollectedFromCustomer => collectionsFromCustomer.where((p) => p.status == CheckStatus.cleared || p.status == CheckStatus.transferred || p.method != PaymentMethod.check).fold(0.0, (sum, item) => sum + item.amount);
+  double get pendingCustomerChecks => collectionsFromCustomer.where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending).fold(0.0, (sum, item) => sum + item.amount);
   double get remainingCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer;
   double get finalBalanceCustomerDebt => totalServicePriceForCustomer - totalCollectedFromCustomer - pendingCustomerChecks;
 
-  double get totalPaidToLogistics => paymentsToLogistics
-      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
-      .fold(0.0, (sum, item) => sum + item.amount);
-      
-  double get pendingLogisticsChecks => paymentsToLogistics
-      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
-      .fold(0.0, (sum, item) => sum + item.amount);
-
+  double get totalPaidToLogistics => paymentsToLogistics.where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check).fold(0.0, (sum, item) => sum + item.amount);
+  double get pendingLogisticsChecks => paymentsToLogistics.where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending).fold(0.0, (sum, item) => sum + item.amount);
   double get remainingLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics;
   double get finalBalanceLogisticsDebt => expenses.owedToLogistics - totalPaidToLogistics - pendingLogisticsChecks;
 
-  double get totalPaidToDriver => paymentsToDriver
-      .where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check)
-      .fold(0.0, (sum, item) => sum + item.amount);
+  double get totalPaidToDriver => paymentsToDriver.where((p) => p.status == CheckStatus.cleared || p.method != PaymentMethod.check).fold(0.0, (sum, item) => sum + item.amount);
+  double get pendingDriverChecks => paymentsToDriver.where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending).fold(0.0, (sum, item) => sum + item.amount);
 
-  double get pendingDriverChecks => paymentsToDriver
-      .where((p) => p.method == PaymentMethod.check && p.status == CheckStatus.pending)
-      .fold(0.0, (sum, item) => sum + item.amount);
-
-  /// سود خالص سرویس (سود مالک خودرو): کرایه حمل کل منهای تمام هزینه‌های انجام شده
   double get netProfit => totalTransportAmount - expenses.total;
-
-  /// مبلغ "صافی" که راننده باید از باربری دریافت کند: کرایه حمل منهای مبالغ بارنامه
   double get driverNetPay => totalTransportAmount - expenses.owedToLogistics;
-
-  /// حقوق راننده بر اساس درصد توافقی از کرایه کل + اضافه پرداختی
   double get driverSalary => (totalTransportAmount * driverAgreementPercentage / 100) + extraDriverPay;
-
-  /// سهم مالک ماشین پس از کسر حقوق راننده (اگر راننده و مالک یکی نباشند)
-  /// اگر راننده و مالک یکی باشند، سهم مالک همان سود خالص است.
   double get ownerShare => isOwnerDriver ? netProfit : netProfit - driverSalary;
 
   bool get isSellerSettled => remainingDebtToSeller <= 0;
@@ -828,6 +867,7 @@ class LoadService {
       'driverAgreementPercentage': driverAgreementPercentage,
       'isOwnerDriver': isOwnerDriver ? 1 : 0,
       'extraDriverPay': extraDriverPay,
+      'isFinalized': isFinalized ? 1 : 0,
     };
   }
 
@@ -880,6 +920,7 @@ class LoadService {
       driverAgreementPercentage: (map['driverAgreementPercentage'] as num? ?? 0).toDouble(),
       isOwnerDriver: (map['isOwnerDriver'] ?? 0) == 1,
       extraDriverPay: (map['extraDriverPay'] as num? ?? 0).toDouble(),
+      isFinalized: (map['isFinalized'] ?? 0) == 1,
     );
   }
 }

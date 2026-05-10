@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -40,6 +41,19 @@ class PdfService {
     );
   }
 
+  static Future<pw.ImageProvider?> _loadImage(String? path) async {
+    if (path == null || path.isEmpty) return null;
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        return pw.MemoryImage(await file.readAsBytes());
+      }
+    } catch (e) {
+      debugPrint("Error loading image for PDF: $e");
+    }
+    return null;
+  }
+
   static Future<bool> generateAndPrintService(LoadService service) async {
     try {
       final pdf = pw.Document();
@@ -49,98 +63,231 @@ class PdfService {
 
       String logisticsName = service.logisticsCo?.name ?? service.logisticsName ?? "";
 
+      // بارگذاری تمامی تصاویر موجود (هزینه‌ها، مدارک و رسیدها)
+      final List<MapEntry<String, pw.ImageProvider>> attachedImages = [];
+      
+      final imagePaths = {
+        "فاکتور خرید": service.purchaseInvoiceImagePath,
+        "تصویر بارنامه": service.billOfLadingImagePath,
+        "تصویر باسکول": service.weighbridgeImagePath,
+        "رسید سوخت": exp.fuelImagePath,
+        "رسید عوارض": exp.tollImagePath,
+        "کمیسیون": exp.commissionImagePath,
+        "انعام بارگیری": exp.loadingTipImagePath,
+        "انعام تخلیه": exp.unloadingTipImagePath,
+        "ضدعفونی": exp.disinfectionImagePath,
+        "باسکول بارگیری": exp.loadingWeighbridgeImagePath,
+        "لودر": exp.loaderLoadingImagePath,
+        "بارشمار": exp.tallyClerkImagePath,
+        "باسکول تخلیه": exp.unloadingWeighbridgeImagePath,
+        "کارگر تخلیه": exp.unloadingWorkerImagePath,
+      };
+
+      for (var entry in imagePaths.entries) {
+        final img = await _loadImage(entry.value);
+        if (img != null) attachedImages.add(MapEntry(entry.key, img));
+      }
+
+      // افزودن تصاویر هزینه‌های جانبی
+      for (var other in exp.otherExpenses) {
+        final img = await _loadImage(other.receiptImagePath);
+        if (img != null) attachedImages.add(MapEntry("هزینه: ${other.title}", img));
+      }
+
+      // افزودن تمامی رسیدهای پرداخت و تصاویر چک‌های مرتبط با این سرویس
+      final allPayments = [
+        ...service.paymentsToSeller,
+        ...service.collectionsFromCustomer,
+        ...service.paymentsToLogistics,
+        ...service.paymentsToDriver,
+      ];
+
+      for (var p in allPayments) {
+        final receiptImg = await _loadImage(p.receiptImagePath);
+        if (receiptImg != null) {
+          String label = "رسید: ";
+          if (p.type == PaymentType.toSeller) label += "پرداخت به فروشنده";
+          else if (p.type == PaymentType.fromCustomer) label += "دریافت از مشتری";
+          else if (p.type == PaymentType.toLogistics) label += "پرداخت به باربری";
+          else if (p.type == PaymentType.toDriver) label += "پرداخت به راننده";
+          attachedImages.add(MapEntry("$label (${AppFormatters.formatCurrency(p.amount)} تومان)", receiptImg));
+        }
+        final checkImg = await _loadImage(p.checkImagePath);
+        if (checkImg != null) {
+          attachedImages.add(MapEntry("چک: ${p.bankName ?? ''} - ${p.checkNumber ?? ''}", checkImg));
+        }
+      }
+
       pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a5,
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
           theme: theme,
-          margin: const pw.EdgeInsets.all(20),
-          build: (context) => pw.Directionality(
-            textDirection: pw.TextDirection.ltr,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.end,
-              children: [
-                _buildHeader("صورت‌حساب حمل بار"),
-                pw.SizedBox(height: 10),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    _infoText("شماره فاکتور:", service.orderCode.toPersianDigit()),
-                    _infoText("تاریخ:", service.date.toPersianDate()),
-                  ],
-                ),
-                pw.Divider(color: PdfColors.grey300, thickness: 0.5),
-                pw.SizedBox(height: 10),
-                
-                _buildSectionTitle("اطلاعات طرفین"),
-                _rowInfo("مشتری:", service.customer?.fullName ?? "---"),
-                _rowInfo("راننده:", service.driver.fullName),
-                _rowInfo("خودرو:", service.car.name),
-                if (logisticsName.isNotEmpty)
-                  _rowInfo("باربری:", logisticsName),
-                
-                pw.SizedBox(height: 10),
-                _buildSectionTitle("جزئیات بار و مسیر"),
-                _rowInfo("نوع بار:", service.loadType.name),
-                _rowInfo("مسیر:", "${service.origin} به ${service.destination}"),
-                _rowInfo("وزن خالص:", "${service.weight.toString().toPersianDigit()} تن"),
-                
-                pw.SizedBox(height: 10),
-                _buildSectionTitle("محاسبات مالی بارنامه"),
-                _rowInfo("پایه بارنامه:", "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
-                
-                // لیست مبالغ اضافه شده به بارنامه
-                if (exp.includeInBillOfLading) ...[
-                  if (exp.commission > 0) _rowInfo("کمیسیون:", "${AppFormatters.formatCurrency(exp.commission)} تومان"),
-                  if (exp.tollCost > 0) _rowInfo("عوارض:", "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
-                  if (exp.fuelCost > 0) _rowInfo("سوخت:", "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
-                ] else ...[
-                  if (exp.commissionInBoL && exp.commission > 0) _rowInfo("کمیسیون:", "${AppFormatters.formatCurrency(exp.commission)} تومان"),
-                  if (exp.tollInBoL && exp.tollCost > 0) _rowInfo("عوارض:", "${AppFormatters.formatCurrency(exp.tollCost)} تومان"),
-                  if (exp.fuelInBoL && exp.fuelCost > 0) _rowInfo("سوخت:", "${AppFormatters.formatCurrency(exp.fuelCost)} تومان"),
-                  if (exp.loadingTipInBoL && exp.loadingTip > 0) _rowInfo("انعام بارگیری:", "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
-                  if (exp.unloadingTipInBoL && exp.unloadingTip > 0) _rowInfo("انعام تخلیه:", "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
-                  for (var e in exp.otherExpenses)
-                    if (e.includeInBoL && e.amount > 0) _rowInfo(e.title + ":", "${AppFormatters.formatCurrency(e.amount)} تومان"),
-                ],
-                _rowInfo("جمع قابل پرداخت به باربری:", "${AppFormatters.formatCurrency(exp.owedToLogistics)} تومان", isBold: true),
-
-                pw.SizedBox(height: 10),
-                _buildSectionTitle("خلاصه فاکتور نهایی"),
-                if (!isTransportOnly)
-                  _rowInfo("جمع کل خرید کالا:", "${AppFormatters.formatCurrency(service.totalPurchaseAmount)} تومان"),
-                _rowInfo("کل کرایه حمل:", "${AppFormatters.formatCurrency(service.totalTransportAmount)} تومان"),
-                
-                if (service.fareAccountNumber != null && service.fareAccountNumber!.isNotEmpty) ...[
-                  pw.SizedBox(height: 5),
-                  _rowInfo("واریز کرایه به:", "${service.fareAccountOwner ?? ''} (${service.fareBankName ?? ''})"),
-                  _rowInfo("شماره حساب:", service.fareAccountNumber!.toPersianDigit()),
-                ],
-
-                pw.Spacer(),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(10),
-                  decoration: pw.BoxDecoration(
-                    color: accentColor,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
-                    border: pw.Border.all(color: secondaryColor, width: 0.5),
-                  ),
-                  child: pw.Row(
+          margin: const pw.EdgeInsets.all(30),
+          footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
+          build: (context) => [
+            pw.Directionality(
+              textDirection: pw.TextDirection.ltr,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  _buildHeader("صورت‌حساب جامع حمل بار و مخارج"),
+                  pw.SizedBox(height: 15),
+                  pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text(_fix("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12, color: secondaryColor)),
-                      pw.Text(_fix(isTransportOnly ? "مبلغ قابل پرداخت:" : "جمع کل فاکتور مشتری:"),
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: secondaryColor)),
+                      _infoText("کد سفارش:", service.orderCode.toPersianDigit()),
+                      _infoText("تاریخ ثبت:", service.date.toPersianDate()),
+                      _infoText("وضعیت نهایی:", service.isFinalized ? "تکمیل شده" : "در جریان"),
                     ],
                   ),
-                ),
-                pw.SizedBox(height: 20),
-                _buildSignatures(),
-                pw.Spacer(),
-                _buildFooter(),
-              ],
+                  pw.Divider(color: PdfColors.grey300, thickness: 0.5),
+                  
+                  _buildSectionTitle("اطلاعات طرفین و خودرو"),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          _rowInfo("راننده:", service.driver.fullName),
+                          _rowInfo("خودرو:", "${service.car.name} (${service.car.plate ?? 'بدون پلاک'})"),
+                        ]
+                      ),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          _rowInfo("مشتری:", service.customer?.fullName ?? "---"),
+                          _rowInfo("فروشنده:", service.seller.name),
+                          if (logisticsName.isNotEmpty) _rowInfo("باربری:", logisticsName),
+                        ]
+                      ),
+                    ]
+                  ),
+
+                  pw.SizedBox(height: 10),
+                  _buildSectionTitle("جزئیات بار و زمان‌بندی"),
+                  _rowInfo("نوع کالا:", service.loadType.name),
+                  _rowInfo("مسیر جابجایی:", "${service.origin} به ${service.destination}"),
+                  _rowInfo("وزن خالص:", "${service.weight.toString().toPersianDigit()} تن"),
+                  if (service.loadingDateTime != null) 
+                    _rowInfo("زمان بارگیری:", AppFormatters.formatPersianDateTime(service.loadingDateTime!).toPersianDigit()),
+                  if (service.unloadingDateTime != null) 
+                    _rowInfo("زمان تخلیه:", AppFormatters.formatPersianDateTime(service.unloadingDateTime!).toPersianDigit()),
+                  
+                  pw.SizedBox(height: 10),
+                  _buildSectionTitle("ریز محاسبات مالی و مخارج بارنامه"),
+                  _rowInfo("هزینه پایه بارنامه:", "${AppFormatters.formatCurrency(exp.billOfLadingCost)} تومان"),
+                  
+                  // لیست جامع تمامی مخارج
+                  if (exp.commission > 0) _rowInfo("کمیسیون باربری:", "${AppFormatters.formatCurrency(exp.commission)} تومان", isBold: exp.commissionInBoL),
+                  if (exp.totalTolls > 0) _rowInfo("مجموع عوارض مسیر:", "${AppFormatters.formatCurrency(exp.totalTolls)} تومان", isBold: exp.tollInBoL),
+                  if (exp.fuelCost > 0) _rowInfo("هزینه سوخت:", "${AppFormatters.formatCurrency(exp.fuelCost)} تومان", isBold: exp.fuelInBoL),
+                  
+                  if (exp.loadingTip > 0) _rowInfo("انعام بارگیری:", "${AppFormatters.formatCurrency(exp.loadingTip)} تومان"),
+                  if (exp.loadingWeighbridge > 0) _rowInfo("باسکول بارگیری:", "${AppFormatters.formatCurrency(exp.loadingWeighbridge)} تومان"),
+                  if (exp.loaderLoading > 0) _rowInfo("هزینه لودر:", "${AppFormatters.formatCurrency(exp.loaderLoading)} تومان"),
+                  if (exp.tallyClerk > 0) _rowInfo("هزینه بارشمار:", "${AppFormatters.formatCurrency(exp.tallyClerk)} تومان"),
+                  
+                  if (exp.unloadingTip > 0) _rowInfo("انعام تخلیه:", "${AppFormatters.formatCurrency(exp.unloadingTip)} تومان"),
+                  if (exp.unloadingWeighbridge > 0) _rowInfo("باسکول تخلیه:", "${AppFormatters.formatCurrency(exp.unloadingWeighbridge)} تومان"),
+                  if (exp.unloadingWorker > 0) _rowInfo("کارگر تخلیه:", "${AppFormatters.formatCurrency(exp.unloadingWorker)} تومان"),
+                  
+                  if (exp.disinfectionCost > 0) _rowInfo("هزینه ضدعفونی:", "${AppFormatters.formatCurrency(exp.disinfectionCost)} تومان"),
+                  
+                  for (var e in exp.otherExpenses)
+                    if (e.amount > 0) _rowInfo("${e.title}:", "${AppFormatters.formatCurrency(e.amount)} تومان", isBold: e.includeInBoL),
+                  
+                  pw.Divider(color: PdfColors.grey400),
+                  _rowInfo("جمع کل مخارج سرویس:", "${AppFormatters.formatCurrency(exp.total)} تومان", isBold: true),
+                  _rowInfo("مبلغ قابل پرداخت به باربری:", "${AppFormatters.formatCurrency(exp.owedToLogistics)} تومان", isBold: true, color: PdfColors.orange900),
+
+                  if (allPayments.isNotEmpty) ...[
+                    pw.SizedBox(height: 10),
+                    _buildSectionTitle("خلاصه تراکنش‌های مالی و رسیدها"),
+                    for (var p in allPayments)
+                      _rowInfo(
+                        "${_getPaymentTypeLabel(p.type)} (${_getPaymentMethodName(p.method)}):", 
+                        "${AppFormatters.formatCurrency(p.amount)} تومان",
+                        color: p.type == PaymentType.fromCustomer ? PdfColors.green800 : PdfColors.red800,
+                      ),
+                  ],
+
+                  pw.SizedBox(height: 10),
+                  _buildSectionTitle("خلاصه نهایی و سوددهی"),
+                  if (!isTransportOnly)
+                    _rowInfo("مبلغ خرید کالا:", "${AppFormatters.formatCurrency(service.totalPurchaseAmount)} تومان"),
+                  _rowInfo("کل کرایه حمل:", "${AppFormatters.formatCurrency(service.totalTransportAmount)} تومان"),
+                  _rowInfo("سود خالص (صافی):", "${AppFormatters.formatCurrency(service.netProfit)} تومان", isBold: true, color: PdfColors.green900),
+                  
+                  if (!service.isOwnerDriver) ...[
+                    _rowInfo("حقوق راننده (${service.driverAgreementPercentage}%):", "${AppFormatters.formatCurrency(service.driverSalary)} تومان"),
+                    _rowInfo("سهم خالص مالک:", "${AppFormatters.formatCurrency(service.ownerShare)} تومان", isBold: true),
+                  ],
+
+                  pw.SizedBox(height: 15),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: accentColor,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                      border: pw.Border.all(color: secondaryColor, width: 1),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(_fix("${AppFormatters.formatCurrency(service.totalServicePriceForCustomer)} تومان"),
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 13, color: secondaryColor)),
+                        pw.Text(_fix(isTransportOnly ? "جمع کل مبلغ قابل پرداخت:" : "جمع کل فاکتور مشتری (کالا + حمل):"),
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: secondaryColor)),
+                      ],
+                    ),
+                  ),
+                  
+                  if (service.fareAccountNumber != null && service.fareAccountNumber!.isNotEmpty) ...[
+                    pw.SizedBox(height: 10),
+                    _rowInfo("واریز کرایه به:", "${service.fareAccountOwner ?? ''} (${service.fareBankName ?? ''})"),
+                    _rowInfo("شماره حساب/کارت:", service.fareAccountNumber!.toPersianDigit()),
+                  ],
+                  
+                  pw.SizedBox(height: 30),
+                  _buildSignatures(),
+                ],
+              ),
             ),
-          ),
+            
+            // صفحه تصاویر پیوست
+            if (attachedImages.isNotEmpty) ...[
+              pw.NewPage(),
+              _buildSectionTitle("پیوست‌ها و تصاویر اسناد"),
+              pw.SizedBox(height: 10),
+              pw.Wrap(
+                spacing: 20,
+                runSpacing: 20,
+                children: attachedImages.map((entry) => pw.Column(
+                  children: [
+                    pw.Container(
+                      width: 240,
+                      height: 180,
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                      ),
+                      child: pw.Image(entry.value, fit: pw.BoxFit.contain),
+                    ),
+                    pw.SizedBox(height: 5),
+                    pw.Container(
+                      width: 240,
+                      child: pw.Center(
+                        child: pw.Text(_fix(entry.key), 
+                          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey800),
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ],
+                )).toList(),
+              ),
+            ],
+          ],
         ),
       );
 
@@ -148,6 +295,15 @@ class PdfService {
     } catch (e) {
       debugPrint("PDF Error: $e");
       return false;
+    }
+  }
+
+  static String _getPaymentTypeLabel(PaymentType type) {
+    switch (type) {
+      case PaymentType.toSeller: return "پرداخت به فروشنده";
+      case PaymentType.fromCustomer: return "دریافت از مشتری";
+      case PaymentType.toLogistics: return "پرداخت به باربری";
+      case PaymentType.toDriver: return "پرداخت به راننده";
     }
   }
 
@@ -290,7 +446,7 @@ class PdfService {
               ]).toList(),
             ),
             pw.SizedBox(height: 20),
-            _buildSectionTitle("لیست پرداختی‌های ما"),
+            _buildSectionTitle("لیست پرداختی‌ها"),
             _buildTable(
               ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
               payments.asMap().entries.map((e) => [
@@ -322,7 +478,7 @@ class PdfService {
       final pdf = pw.Document();
       final theme = await _getTheme();
 
-      double totalEarned = services.fold(0, (sum, s) => sum + s.netProfit);
+      double totalEarned = services.fold(0, (sum, s) => sum + (s.isOwnerDriver ? s.netProfit : s.driverSalary));
       double totalPaid = payments.where((p) => p.isCleared).fold(0, (sum, p) => sum + p.amount);
       double pendingChecks = payments.where((p) => p.method == PaymentMethod.check && !p.isCleared).fold(0, (sum, p) => sum + p.amount);
 
@@ -333,19 +489,19 @@ class PdfService {
           header: (context) => _buildHeader("صورت‌حساب مالی راننده: ${driver.fullName}"),
           footer: (context) => _buildFooter(pageNumber: context.pageNumber, totalPages: context.pagesCount),
           build: (context) => [
-            _buildSectionTitle("لیست سرویس‌های انجام شده (سود خالص)"),
+            _buildSectionTitle("لیست سرویس‌های انجام شده"),
             _buildTable(
-              ['ردیف', 'تاریخ', 'نوع بار', 'کد سفارش', 'سود راننده'],
+              ['ردیف', 'تاریخ', 'نوع بار', 'کد سفارش', 'مبلغ کارکرد'],
               services.asMap().entries.map((e) => [
                 (e.key + 1).toString().toPersianDigit(),
                 e.value.date.toPersianDate(),
                 e.value.loadType.name,
                 e.value.orderCode.toPersianDigit(),
-                AppFormatters.formatCurrency(e.value.netProfit),
+                AppFormatters.formatCurrency(e.value.isOwnerDriver ? e.value.netProfit : e.value.driverSalary),
               ]).toList(),
             ),
             pw.SizedBox(height: 20),
-            _buildSectionTitle("لیست پرداختی‌های ما به راننده"),
+            _buildSectionTitle("لیست پرداختی‌ها"),
             _buildTable(
               ['ردیف', 'تاریخ', 'روش', 'وضعیت', 'مبلغ'],
               payments.asMap().entries.map((e) => [
@@ -419,13 +575,13 @@ class PdfService {
     );
   }
 
-  static pw.Widget _rowInfo(String label, String value, {bool isBold = false}) {
+  static pw.Widget _rowInfo(String label, String value, {bool isBold = false, PdfColor? color}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.end,
         children: [
-          pw.Text(_fix(value), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+          pw.Text(_fix(value), style: pw.TextStyle(fontSize: 9, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal, color: color)),
           pw.SizedBox(width: 8),
           pw.Text(_fix(label), style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700, fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal)),
         ],
